@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.CasanMonitor" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#101817</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">#2DBA9D</item>
+    </style>
+</resources>
