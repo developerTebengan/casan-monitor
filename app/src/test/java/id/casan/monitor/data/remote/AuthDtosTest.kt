@@ -2,6 +2,8 @@ package id.casan.monitor.data.remote
 
 import com.google.gson.Gson
 import id.casan.monitor.domain.model.MonitorAccount
+import id.casan.monitor.feature.auth.loginPhoneNumber
+import id.casan.monitor.feature.auth.usesExistingOtp
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -63,6 +65,14 @@ class AuthDtosTest {
         )
         assertEquals("""{"refresh_token":"refresh"}""", gson.toJson(RefreshRequest("refresh")))
         assertEquals("""{"token":"test-token","platform":"android"}""", gson.toJson(FirebaseTokenRequest("test-token")))
+    }
+
+    @Test
+    fun onlyTheConfiguredPhoneSkipsRequestingAnOtp() {
+        assertEquals("+62812222222", loginPhoneNumber(" 0812222222 "))
+        assertTrue(usesExistingOtp("0812222222"))
+        assertTrue(usesExistingOtp("+62812222222"))
+        assertFalse(usesExistingOtp("+62812222223"))
     }
 
     private fun decode(json: String): AuthEnvelope = gson.fromJson(json, AuthEnvelope::class.java)

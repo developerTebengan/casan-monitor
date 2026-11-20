@@ -32,10 +32,12 @@ fun LoginScreen(
     var channel by rememberSaveable { mutableIntStateOf(2) }
     var code by remember { mutableStateOf("") }
     val focus = LocalFocusManager.current
-    val normalizedPhone = phone.trim()
+    val normalizedPhone = loginPhoneNumber(phone)
+    val existingOtp = usesExistingOtp(normalizedPhone)
     val validPhone = internationalPhone.matches(normalizedPhone)
     val sent = state.sentTo == OtpDestination(normalizedPhone, channel)
-    val canSubmit = !state.loading && validPhone && code.length == 4
+    val showCodeEntry = existingOtp || sent
+    val canSubmit = showCodeEntry && !state.loading && validPhone && code.length == 4
 
     fun submit() {
         if (!canSubmit) return
@@ -80,25 +82,31 @@ fun LoginScreen(
                             )
                         }
                     }
-                    OutlinedButton(
-                        onClick = { onSendOtp(normalizedPhone, channel) },
-                        enabled = !state.loading && validPhone,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (sent) "Resend code" else "Send code") }
-                    if (sent) Text("Check your selected channel for the code.")
-                    OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it.filter { digit -> digit in '0'..'9' }.take(4) },
-                        label = { Text("Four-digit code") },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !state.loading,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { submit() }),
-                        visualTransformation = PasswordVisualTransformation(),
-                    )
-                    Button(onClick = ::submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.sign_in))
+                    if (existingOtp) {
+                        Text("Enter the verification code you already have.")
+                    } else {
+                        OutlinedButton(
+                            onClick = { onSendOtp(normalizedPhone, channel) },
+                            enabled = !state.loading && validPhone,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(if (sent) "Resend code" else "Send code") }
+                        if (sent) Text("Check your selected channel for the code.")
+                    }
+                    if (showCodeEntry) {
+                        OutlinedTextField(
+                            value = code,
+                            onValueChange = { code = it.filter { digit -> digit in '0'..'9' }.take(4) },
+                            label = { Text("Four-digit code") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !state.loading,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { submit() }),
+                            visualTransformation = PasswordVisualTransformation(),
+                        )
+                        Button(onClick = ::submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.sign_in))
+                        }
                     }
                     if (state.loading) LoadingState()
                     state.error?.let { Text(it.message(), color = MaterialTheme.colorScheme.error) }
