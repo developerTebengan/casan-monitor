@@ -3,6 +3,7 @@ package id.casan.monitor.core.navigation
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -15,12 +16,12 @@ import id.casan.monitor.R
 import id.casan.monitor.core.designsystem.components.MonitorIcon
 import id.casan.monitor.core.designsystem.components.MonitorTopAppBar
 import id.casan.monitor.data.local.ThemeMode
-import id.casan.monitor.domain.model.IncidentSeverity
 import id.casan.monitor.feature.alerts.AlertsScreen
-import id.casan.monitor.feature.dashboard.AlertSearchState
 import id.casan.monitor.feature.dashboard.DashboardScreen
-import id.casan.monitor.feature.dashboard.MonitoringState
 import id.casan.monitor.feature.history.HistoryScreen
+import id.casan.monitor.feature.notifications.NotificationDetailScreen
+import id.casan.monitor.feature.notifications.NotificationState
+import id.casan.monitor.notification.isNotificationId
 import id.casan.monitor.feature.settings.SettingsAccount
 import id.casan.monitor.feature.settings.SettingsScreen
 
@@ -33,10 +34,11 @@ private enum class Destination(val route: String, val label: Int, val icon: Int)
 
 @Composable
 fun MonitorNavigation(
-    state: MonitoringState,
-    search: AlertSearchState,
-    onQuery: (String) -> Unit,
-    onSeverity: (IncidentSeverity?) -> Unit,
+    state: NotificationState,
+    pendingNotification: String?,
+    onNotificationOpened: () -> Unit,
+    onRead: (String) -> Unit,
+    readErrorId: String?,
     mode: ThemeMode,
     onTheme: (ThemeMode) -> Unit,
     onNotifications: () -> Unit,
@@ -56,13 +58,30 @@ fun MonitorNavigation(
         }
     }
 
+    fun openNotification(id: String) {
+        if (isNotificationId(id)) {
+            nav.navigate("notification/$id") { launchSingleTop = true }
+        }
+    }
+
+    LaunchedEffect(pendingNotification) {
+        val id = pendingNotification ?: return@LaunchedEffect
+        select(Destination.ALERTS)
+        openNotification(id)
+        onNotificationOpened()
+    }
+
     Scaffold(
         modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         containerColor = MaterialTheme.colorScheme.background,
         contentColor = MaterialTheme.colorScheme.onBackground,
-        topBar = { MonitorTopAppBar({ select(Destination.ALERTS) }, { select(Destination.SETTINGS) }) },
+        topBar = {
+            if (activeRoute != "notification/{id}") {
+                MonitorTopAppBar({ select(Destination.ALERTS) }, { select(Destination.SETTINGS) })
+            }
+        },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            if (activeRoute != "notification/{id}") NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 Destination.entries.forEach { destination ->
                     NavigationBarItem(
                         selected = activeRoute == destination.route,
@@ -80,9 +99,15 @@ fun MonitorNavigation(
             startDestination = Destination.DASHBOARD.route,
             modifier = Modifier.padding(padding).consumeWindowInsets(padding).imePadding(),
         ) {
-            composable(Destination.DASHBOARD.route) { DashboardScreen(state, { select(Destination.ALERTS) }, retry) }
-            composable(Destination.ALERTS.route) { AlertsScreen(state, search, onQuery, onSeverity, retry) }
-            composable(Destination.HISTORY.route) { HistoryScreen(state, retry) }
+            composable(Destination.DASHBOARD.route) { DashboardScreen(state, { select(Destination.ALERTS) }, retry, ::openNotification) }
+            composable(Destination.ALERTS.route) { AlertsScreen(state, retry, ::openNotification) }
+            composable(Destination.HISTORY.route) { HistoryScreen(state, retry, ::openNotification) }
+            composable("notification/{id}") { detail ->
+                val id = detail.arguments?.getString("id").orEmpty()
+                NotificationDetailScreen(state, id, readErrorId == id, { onRead(id) }, retry) {
+                    nav.popBackStack()
+                }
+            }
             composable(Destination.SETTINGS.route) { SettingsScreen(mode, onTheme, onNotifications, account) }
         }
     }

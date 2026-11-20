@@ -9,38 +9,38 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import id.casan.monitor.R
 import id.casan.monitor.core.designsystem.components.*
 import id.casan.monitor.core.designsystem.theme.*
-import id.casan.monitor.data.local.MockIncidents
+import id.casan.monitor.domain.model.NotificationSeverity
+import id.casan.monitor.feature.notifications.NotificationCard
+import id.casan.monitor.feature.notifications.NotificationState
+import id.casan.monitor.feature.notifications.NotificationStorageError
 
 @Composable
-fun DashboardScreen(state: MonitoringState, onAlerts: () -> Unit, retry: () -> Unit) {
+fun DashboardScreen(state: NotificationState, onAlerts: () -> Unit, retry: () -> Unit, onOpen: (String) -> Unit) {
     PageFrame { modifier ->
         LazyColumn(
             modifier,
             contentPadding = PaddingValues(Space.medium),
             verticalArrangement = Arrangement.spacedBy(Space.medium),
         ) {
-            item { PageHeading(stringResource(R.string.overview), stringResource(R.string.overview_description)) }
+            item { PageHeading(stringResource(R.string.overview), "Notifications received on this device") }
             when (state) {
-                MonitoringState.Loading -> item { LoadingState() }
-                MonitoringState.Error -> item { ErrorState(retry) }
-                is MonitoringState.Content -> {
-                    item { SystemStatusCard(state.updatedAt) }
-                    item { SectionHeader(stringResource(R.string.incident_summary)) }
-                    item { IncidentSummary(state) }
+                NotificationState.Loading -> item { LoadingState() }
+                NotificationState.Error -> item { NotificationStorageError(retry) }
+                is NotificationState.Content -> {
+                    item { NotificationSummary(state) }
                     item {
-                        SectionHeader(stringResource(R.string.recent_alerts)) {
+                        SectionHeader("Recent notifications") {
                             TextButton(onClick = onAlerts) { Text(stringResource(R.string.view_all)) }
                         }
                     }
-                    if (state.recent.isEmpty()) {
-                        item { EmptyState(stringResource(R.string.no_recent), stringResource(R.string.recent_empty)) }
+                    if (state.items.isEmpty()) {
+                        item { EmptyState("No recent notifications", "Messages received by the app will appear here.") }
                     }
-                    items(state.recent, key = { it.id }) { IncidentCard(it) }
+                    items(state.items.take(4), key = { it.id }) { NotificationCard(it, onOpen) }
                 }
             }
         }
@@ -48,11 +48,11 @@ fun DashboardScreen(state: MonitoringState, onAlerts: () -> Unit, retry: () -> U
 }
 
 @Composable
-private fun IncidentSummary(state: MonitoringState.Content) {
+private fun NotificationSummary(state: NotificationState.Content) {
     val cards: @Composable (Modifier) -> Unit = { modifier ->
-        IncidentSummaryCard(stringResource(R.string.critical_incidents), state.criticalCount, Critical, R.drawable.ic_warning, modifier)
-        IncidentSummaryCard(stringResource(R.string.high_incidents), state.highCount, Warning, R.drawable.ic_bell, modifier)
-        IncidentSummaryCard(stringResource(R.string.resolved_incidents), state.resolved.size, Success, R.drawable.ic_check, modifier)
+        IncidentSummaryCard("Unread", state.unreadCount, Success, R.drawable.ic_bell, modifier)
+        IncidentSummaryCard("Critical", state.items.count { it.severity == NotificationSeverity.CRITICAL }, Critical, R.drawable.ic_warning, modifier)
+        IncidentSummaryCard("High", state.items.count { it.severity == NotificationSeverity.HIGH }, Warning, R.drawable.ic_bell, modifier)
     }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         if (maxWidth >= 312.dp && LocalDensity.current.fontScale <= 1.3f) {
@@ -60,14 +60,5 @@ private fun IncidentSummary(state: MonitoringState.Content) {
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(Space.small)) { cards(Modifier.fillMaxWidth()) }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun DashboardPreview() {
-    val snapshot = MockIncidents.snapshot()
-    MonitorTheme {
-        DashboardScreen(MonitoringState.Content(snapshot.incidents, snapshot.updatedAt), {}, {})
     }
 }

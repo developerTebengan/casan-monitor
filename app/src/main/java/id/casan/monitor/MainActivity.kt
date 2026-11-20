@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -22,7 +23,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
@@ -35,7 +35,8 @@ import id.casan.monitor.data.repository.AuthState
 import id.casan.monitor.feature.auth.LoginScreen
 import id.casan.monitor.feature.auth.LoginViewModel
 import id.casan.monitor.feature.auth.message
-import id.casan.monitor.feature.dashboard.MonitoringViewModel
+import id.casan.monitor.feature.notifications.NotificationCenterViewModel
+import id.casan.monitor.feature.notifications.NotificationState
 import id.casan.monitor.feature.settings.SettingsAccount
 import id.casan.monitor.notification.MonitorDeviceRegistration
 import javax.inject.Inject
@@ -47,23 +48,24 @@ class MainActivity : ComponentActivity() {
     private val auth: LoginViewModel by viewModels()
     private val notificationsEnabled = mutableStateOf(false)
     private val canRequestNotifications = mutableStateOf(false)
-    private val notificationLaunch = mutableStateOf(0)
+    private val pendingNotification = mutableStateOf<String?>(null)
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         updatePermissionStatus()
     }
 
-    private val monitoring: MonitoringViewModel by viewModels()
+    private val notifications: NotificationCenterViewModel by viewModels()
     private val settings: SettingsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        notificationLaunch.value = savedInstanceState?.getInt("notificationLaunch")
-            ?: if (intent.action == ACTION_OPEN_NOTIFICATION) 1 else 0
+        pendingNotification.value = if (savedInstanceState == null) {
+            notificationFrom(intent)
+        } else {
+            savedInstanceState.getString("pendingNotification")
+        }
         updatePermissionStatus()
         setContent {
-            val state by monitoring.state.collectAsStateWithLifecycle()
-            val search by monitoring.alertSearch.collectAsStateWithLifecycle()
             val theme by settings.theme.collectAsStateWithLifecycle()
             val dark = when (theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -78,9 +80,6 @@ class MainActivity : ComponentActivity() {
             }
             val session by auth.session.collectAsStateWithLifecycle()
             val loginUi by auth.ui.collectAsStateWithLifecycle()
-            LaunchedEffect(session) {
-                if (session == AuthState.SignedOut) monitoring.resetSearch()
-            }
             MonitorTheme(dark) {
                 when (val current = session) {
                     AuthState.Restoring -> SessionStatus()
@@ -90,23 +89,27 @@ class MainActivity : ComponentActivity() {
                         auth::restore,
                         auth::logout,
                     )
-                    is AuthState.SignedIn -> key(current.account.id, notificationLaunch.value) {
+                    is AuthState.SignedIn -> key(current.account.id) {
+                        val notificationFlow = remember(current.account.id) { notifications.observe(current.account.id) }
+                        val state by notificationFlow.collectAsStateWithLifecycle(initialValue = NotificationState.Loading)
+                        val readError by notifications.readError.collectAsStateWithLifecycle()
                         MonitorNavigation(
                             state = state,
-                            search = search,
-                            onQuery = monitoring::updateAlertQuery,
-                            onSeverity = monitoring::updateAlertSeverity,
+                            pendingNotification = pendingNotification.value,
+                            onNotificationOpened = { pendingNotification.value = null },
+                            onRead = { notifications.markRead(current.account.id, it) },
+                            readErrorId = readError?.takeIf { it.first == current.account.id }?.second,
                             mode = theme,
                             onTheme = settings::setTheme,
                             onNotifications = ::openNotifications,
-                            retry = monitoring::reload,
+                            retry = notifications::refresh,
                             account = SettingsAccount(
                                 current.account,
                                 notificationsEnabled.value,
                                 canRequestNotifications.value,
                                 registration.availability(current.account),
                                 ::requestNotifications,
-                                ::logout,
+                                auth::logout,
                             ),
                         )
                     }
@@ -125,18 +128,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.action == ACTION_OPEN_NOTIFICATION) notificationLaunch.value++
+        notificationFrom(intent)?.let { pendingNotification.value = it }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putInt("notificationLaunch", notificationLaunch.value)
+        outState.putString("pendingNotification", pendingNotification.value)
         super.onSaveInstanceState(outState)
     }
 
-    private fun logout() {
-        auth.logout()
-        monitoring.resetSearch()
-    }
+    private fun notificationFrom(intent: Intent): String? =
+        if (intent.action == ACTION_OPEN_NOTIFICATION) intent.data?.schemeSpecificPart.orEmpty() else null
 
     private fun updatePermissionStatus() {
         notificationsEnabled.value = NotificationManagerCompat.from(this).areNotificationsEnabled()
