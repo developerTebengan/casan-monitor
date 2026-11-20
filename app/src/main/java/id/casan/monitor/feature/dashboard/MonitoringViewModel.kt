@@ -59,6 +59,11 @@ class MonitoringViewModel @Inject constructor(
         AlertSearchState(query, severity, filterIncidents(incidents, query, severity))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AlertSearchState())
 
+    fun resetSearch() {
+        updateAlertQuery("")
+        updateAlertSeverity(null)
+    }
+
     fun updateAlertQuery(query: String) {
         savedState["alert_query"] = query
     }

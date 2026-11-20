@@ -5,6 +5,7 @@
     <application
         android:name=".CasanMonitorApp"
         android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:icon="@drawable/ic_app"
         android:label="@string/app_name"
         android:theme="@style/Theme.CasanMonitor">

@@ -22,18 +22,14 @@ import id.casan.monitor.R
 import id.casan.monitor.core.designsystem.components.*
 import id.casan.monitor.core.designsystem.theme.MonitorTheme
 import id.casan.monitor.core.designsystem.theme.Space
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(state: AuthUiState, onLogin: (String, String) -> Unit) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var attempted by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(false) }
-    var showDemoMessage by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val loading = state.loading
     val focus = LocalFocusManager.current
     val validEmail = Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()
     val emailError = attempted && !validEmail
@@ -42,18 +38,12 @@ fun LoginScreen() {
     fun submit() {
         if (loading) return
         attempted = true
-        showDemoMessage = false
         if (!validEmail || password.isBlank()) return
         focus.clearFocus()
-        loading = true
-        scope.launch {
-            delay(350)
-            loading = false
-            password = ""
-            showPassword = false
-            attempted = false
-            showDemoMessage = true
-        }
+        onLogin(email.trim(), password)
+        password = ""
+        showPassword = false
+        attempted = false
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -102,7 +92,7 @@ fun LoginScreen() {
                         Text(stringResource(R.string.sign_in))
                     }
                     if (loading) LoadingState()
-                    if (showDemoMessage) Text(stringResource(R.string.login_demo))
+                    state.error?.let { Text(it.message(), color = MaterialTheme.colorScheme.error) }
                 }
             }
         }
@@ -112,5 +102,5 @@ fun LoginScreen() {
 @Preview(showBackground = true)
 @Composable
 private fun LoginPreview() {
-    MonitorTheme { LoginScreen() }
+    MonitorTheme { LoginScreen(AuthUiState(), { _, _ -> }) }
 }

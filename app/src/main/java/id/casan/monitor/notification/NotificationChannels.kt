@@ -12,8 +12,8 @@ fun createNotificationChannels(context: Context) {
     context.getSystemService(NotificationManager::class.java).createNotificationChannels(
         listOf(
             channel(R.string.channel_critical_id, R.string.critical, NotificationManager.IMPORTANCE_HIGH),
-            channel(R.string.channel_high_id, R.string.high, NotificationManager.IMPORTANCE_DEFAULT),
-            channel(R.string.channel_info_id, R.string.info, NotificationManager.IMPORTANCE_LOW),
+            channel(R.string.channel_high_id, R.string.high, NotificationManager.IMPORTANCE_HIGH),
+            channel(R.string.channel_info_id, R.string.info, NotificationManager.IMPORTANCE_DEFAULT),
         ),
     )
 }

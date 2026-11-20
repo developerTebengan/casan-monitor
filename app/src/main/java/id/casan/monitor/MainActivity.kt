@@ -1,6 +1,19 @@
 package id.casan.monitor
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -8,6 +21,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
@@ -16,17 +31,36 @@ import dagger.hilt.android.AndroidEntryPoint
 import id.casan.monitor.core.designsystem.theme.MonitorTheme
 import id.casan.monitor.core.navigation.MonitorNavigation
 import id.casan.monitor.data.local.ThemeMode
+import id.casan.monitor.data.repository.AuthState
+import id.casan.monitor.feature.auth.LoginScreen
+import id.casan.monitor.feature.auth.LoginViewModel
+import id.casan.monitor.feature.auth.message
 import id.casan.monitor.feature.dashboard.MonitoringViewModel
+import id.casan.monitor.feature.settings.SettingsAccount
+import id.casan.monitor.notification.MonitorDeviceRegistration
+import javax.inject.Inject
 import id.casan.monitor.feature.settings.SettingsViewModel
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject lateinit var registration: MonitorDeviceRegistration
+    private val auth: LoginViewModel by viewModels()
+    private val notificationsEnabled = mutableStateOf(false)
+    private val canRequestNotifications = mutableStateOf(false)
+    private val notificationLaunch = mutableStateOf(0)
+    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        updatePermissionStatus()
+    }
+
     private val monitoring: MonitoringViewModel by viewModels()
     private val settings: SettingsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        notificationLaunch.value = savedInstanceState?.getInt("notificationLaunch")
+            ?: if (intent.action == ACTION_OPEN_NOTIFICATION) 1 else 0
+        updatePermissionStatus()
         setContent {
             val state by monitoring.state.collectAsStateWithLifecycle()
             val search by monitoring.alertSearch.collectAsStateWithLifecycle()
@@ -42,22 +76,110 @@ class MainActivity : ComponentActivity() {
                     isAppearanceLightNavigationBars = !dark
                 }
             }
+            val session by auth.session.collectAsStateWithLifecycle()
+            val loginUi by auth.ui.collectAsStateWithLifecycle()
+            LaunchedEffect(session) {
+                if (session == AuthState.SignedOut) monitoring.resetSearch()
+            }
             MonitorTheme(dark) {
-                MonitorNavigation(
-                    state = state,
-                    search = search,
-                    onQuery = monitoring::updateAlertQuery,
-                    onSeverity = monitoring::updateAlertSeverity,
-                    mode = theme,
-                    onTheme = settings::setTheme,
-                    onNotifications = ::openNotifications,
-                    retry = monitoring::reload,
-                )
+                when (val current = session) {
+                    AuthState.Restoring -> SessionStatus()
+                    AuthState.SignedOut -> LoginScreen(loginUi, auth::login)
+                    is AuthState.Unavailable -> SessionStatus(
+                        current.error.message(),
+                        auth::restore,
+                        auth::logout,
+                    )
+                    is AuthState.SignedIn -> key(current.account.id, notificationLaunch.value) {
+                        MonitorNavigation(
+                            state = state,
+                            search = search,
+                            onQuery = monitoring::updateAlertQuery,
+                            onSeverity = monitoring::updateAlertSeverity,
+                            mode = theme,
+                            onTheme = settings::setTheme,
+                            onNotifications = ::openNotifications,
+                            retry = monitoring::reload,
+                            account = SettingsAccount(
+                                current.account,
+                                notificationsEnabled.value,
+                                canRequestNotifications.value,
+                                registration.availability(current.account),
+                                ::requestNotifications,
+                                ::logout,
+                            ),
+                        )
+                    }
+                }
             }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updatePermissionStatus()
+        val current = auth.session.value as? AuthState.SignedIn
+        if (current != null && current.expiresAt <= System.currentTimeMillis()) auth.restore()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == ACTION_OPEN_NOTIFICATION) notificationLaunch.value++
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("notificationLaunch", notificationLaunch.value)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun logout() {
+        auth.logout()
+        monitoring.resetSearch()
+    }
+
+    private fun updatePermissionStatus() {
+        notificationsEnabled.value = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        canRequestNotifications.value = Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !getPreferences(MODE_PRIVATE).getBoolean("notification_permission_requested", false)
+    }
+
+    private fun requestNotifications() {
+        if (!canRequestNotifications.value) return
+        getPreferences(MODE_PRIVATE).edit().putBoolean("notification_permission_requested", true).apply()
+        canRequestNotifications.value = false
+        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    companion object {
+        const val ACTION_OPEN_NOTIFICATION = "id.casan.monitor.OPEN_NOTIFICATION"
+    }
+
     private fun openNotifications() {
         startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+    }
+}
+
+@Composable
+private fun SessionStatus(
+    error: String? = null,
+    retry: () -> Unit = {},
+    signOut: () -> Unit = {},
+) {
+    Surface(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.safeDrawingPadding().padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (error == null) {
+                CircularProgressIndicator()
+            } else {
+                Text(error)
+                Button(onClick = retry) { Text("Retry") }
+                TextButton(onClick = signOut) { Text("Sign out") }
+            }
+        }
     }
 }

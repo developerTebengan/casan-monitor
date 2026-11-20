@@ -21,6 +21,7 @@ import id.casan.monitor.feature.dashboard.AlertSearchState
 import id.casan.monitor.feature.dashboard.DashboardScreen
 import id.casan.monitor.feature.dashboard.MonitoringState
 import id.casan.monitor.feature.history.HistoryScreen
+import id.casan.monitor.feature.settings.SettingsAccount
 import id.casan.monitor.feature.settings.SettingsScreen
 
 private enum class Destination(val route: String, val label: Int, val icon: Int) {
@@ -40,6 +41,7 @@ fun MonitorNavigation(
     onTheme: (ThemeMode) -> Unit,
     onNotifications: () -> Unit,
     retry: () -> Unit,
+    account: SettingsAccount,
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -81,7 +83,7 @@ fun MonitorNavigation(
             composable(Destination.DASHBOARD.route) { DashboardScreen(state, { select(Destination.ALERTS) }, retry) }
             composable(Destination.ALERTS.route) { AlertsScreen(state, search, onQuery, onSeverity, retry) }
             composable(Destination.HISTORY.route) { HistoryScreen(state, retry) }
-            composable(Destination.SETTINGS.route) { SettingsScreen(mode, onTheme, onNotifications) }
+            composable(Destination.SETTINGS.route) { SettingsScreen(mode, onTheme, onNotifications, account) }
         }
     }
 }

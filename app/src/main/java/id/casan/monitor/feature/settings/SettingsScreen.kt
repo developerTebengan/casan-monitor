@@ -16,8 +16,22 @@ import id.casan.monitor.core.designsystem.theme.MonitorTheme
 import id.casan.monitor.core.designsystem.theme.Space
 import id.casan.monitor.data.local.ThemeMode
 
+data class SettingsAccount(
+    val profile: id.casan.monitor.domain.model.MonitorAccount,
+    val notificationsEnabled: Boolean,
+    val mayRequestPermission: Boolean,
+    val registration: id.casan.monitor.notification.RegistrationAvailability,
+    val onRequestPermission: () -> Unit,
+    val onLogout: () -> Unit,
+)
+
 @Composable
-fun SettingsScreen(mode: ThemeMode, onTheme: (ThemeMode) -> Unit, onNotifications: () -> Unit) {
+fun SettingsScreen(
+    mode: ThemeMode,
+    onTheme: (ThemeMode) -> Unit,
+    onNotifications: () -> Unit,
+    account: SettingsAccount? = null,
+) {
     PageFrame { modifier ->
         LazyColumn(
             modifier,
@@ -25,6 +39,14 @@ fun SettingsScreen(mode: ThemeMode, onTheme: (ThemeMode) -> Unit, onNotification
             verticalArrangement = Arrangement.spacedBy(Space.medium),
         ) {
             item { Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineMedium) }
+            if (account != null) item {
+                SectionHeader("Account")
+                MonitorCard(Modifier.fillMaxWidth()) {
+                    if (account.profile.name.isNotBlank()) Text(account.profile.name)
+                    Text(account.profile.email)
+                    OutlinedButton(onClick = account.onLogout) { Text("Sign out") }
+                }
+            }
             item {
                 SectionHeader(stringResource(R.string.appearance))
             }
@@ -55,7 +77,22 @@ fun SettingsScreen(mode: ThemeMode, onTheme: (ThemeMode) -> Unit, onNotification
                     }
                     HorizontalDivider()
                     Text(stringResource(R.string.firebase_token), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.firebase_pending), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (account != null) {
+                        val permission = when {
+                            account.notificationsEnabled -> "Notifications enabled"
+                            account.mayRequestPermission -> "Permission required"
+                            else -> "Notifications disabled"
+                        }
+                        Text(permission)
+                        if (account.mayRequestPermission) {
+                            Text("Allow notifications to receive CASAN alerts when the app is in the background.")
+                            Button(onClick = account.onRequestPermission) { Text("Allow notifications") }
+                        }
+                        Text(when (account.registration) {
+                            id.casan.monitor.notification.RegistrationAvailability.ADMIN_REGISTRATION_UNAVAILABLE ->
+                                "Device registration is unavailable for CASAN admin accounts."
+                        })
+                    }
                 }
             }
             item { SectionHeader(stringResource(R.string.about)) }
@@ -64,7 +101,10 @@ fun SettingsScreen(mode: ThemeMode, onTheme: (ThemeMode) -> Unit, onNotification
                     BrandMark()
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.internal_label), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
+                    if (BuildConfig.DEBUG) {
+                        Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
+                        Text("Backend " + BuildConfig.BACKEND_URL.ifBlank { "unconfigured" })
+                    }
                 }
             }
         }

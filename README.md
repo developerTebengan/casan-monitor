@@ -1,19 +1,18 @@
 # CASAN Monitor
 
-CASAN Monitor is a native Android app for internal engineering and operations. The Day 1 app starts at the dashboard and uses a single local mock incident repository.
+CASAN Monitor is a native Android app for internal engineering and operations. Day 2 adds CASAN admin sign-in and gates the dashboard, alerts, history, and settings on an authenticated session. Incident data remains local mock data.
 
-## Run locally
+## Build and run
 
-1. Open this directory in Android Studio with AGP 9.3 support. Set the Gradle JDK to 17 and install Android SDK Platform 37.1, Build-Tools 36.0.0, and Platform-Tools from SDK Manager.
-2. Use the included Gradle wrapper for sync and command-line builds.
-3. Sync Gradle and run the `app` configuration on an emulator or device running Android 8.0 (API 26) or newer. Firebase configuration is optional for this step.
+1. Open this directory in Android Studio with AGP 9.3 support. The Gradle daemon toolchain requests JetBrains JDK 25. The app targets Java and Kotlin JVM 17. Install Android SDK Platform 37.1, Build-Tools 36.0.0, and Platform-Tools.
+2. Start the CASAN backend locally on port 8080 using its local development configuration. Debug defaults to `http://127.0.0.1:8080/`. Connect the emulator or device and run `adb reverse tcp:8080 tcp:8080` so Android can reach the backend on your computer.
+3. Sync Gradle and run the `app` configuration on an API 26 or newer emulator or physical device. For another environment, set `casanBackendUrl=https://<your-casan-environment>/` in your user Gradle properties. Use the service base URL above `api/`, with a trailing slash. To override only debug, set `casanDebugBackendUrl`. Release accepts HTTPS only and requires `casanBackendUrl` for sign-in.
 
 ```sh
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+adb devices
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-
-`LoginScreen.kt` includes a standalone Compose preview. Interactive Preview runs the validation, password visibility toggle, and simulated loading state.
 
 ## Project structure
 
@@ -35,16 +34,27 @@ gradle/                # Version catalog
 
 Gradle Kotlin DSL uses AGP 9.3.1 with built-in Kotlin pinned to 2.4.21. The catalog pins Compose BOM 2026.02.01 (including Material 3), AndroidX Activity Compose 1.13.0, Lifecycle 2.11.0, Navigation Compose 2.10.2, Hilt 2.60.1, KSP 2.3.14, Firebase BOM 35.2.0, Google Services 4.6.0, and JUnit 4.13.2. The target SDK is Android 17 (API 37).
 
-## Firebase setup for Day 3
+## Day 2 backend contracts
 
-1. In the CASAN Firebase project, register an Android app with package name `id.casan.monitor`.
-2. Download the matching `google-services.json` and place it at `app/google-services.json`. The file is ignored by Git. The app module applies the Google Services plugin when the file exists.
-3. Sync and rebuild. Keep the project configuration on the development machine or in protected build storage.
+| Route | Contract |
+|---|---|
+| `POST /api/admin-login` | Accepts `email` and `password`. On success, returns `data.token`, `data.refresh_token`, `data.expires_in` in seconds, and `data.admin` with `ID`, `Name`, and `Email`. |
+| `POST /api/refresh-token` | Accepts `refresh_token`. Returns a rotated token pair without a profile. An invalid refresh returns 401 and the app clears the session. |
+| `POST /api/logout` | Accepts `refresh_token` to revoke. The app clears local credentials before attempting revocation. |
+| `POST /api/firebase/token` | Actual router path, despite the handler's Swagger annotation. Requires bearer authentication and accepts `token` plus `platform: android`. The handler uses the server's `user_id`. |
 
-The manifest declares the messaging service, Android 13 notification permission, default icon, and fallback Info channel. The app creates Critical, High, and Info channels at startup. Settings opens Android's notification preferences for the app. FCM auto-init is disabled for Day 1, so adding the configuration alone leaves token generation disabled. The service logs callback events in debug builds without recording tokens or message payloads.
+The Firebase token handler requires a platform user session. Admin sessions provide `admin_id`, so Android token synchronization remains unavailable for Monitor. Firebase auto-init remains disabled. The checked-in backend exposes no device-unregister route. The app clears local association state and displayed notifications on sign-out.
 
-## Day 2
+The backend sends Firebase notification title/body. Its queue sender adds metadata such as `type`, `allocation_id`, and `expires_at`. No checked-in sender supplies monitoring incident identifiers or severity. Foreground notification payloads use the Info channel and open the authenticated dashboard. In the background, Firebase displays notification payloads and uses the launcher intent. The app has no incident route for these payloads.
 
-- Run a device smoke test on API 26 and API 37, including system back, tab restoration, search and filters, dark mode, and large fonts.
-- Establish an Android CI build that runs unit tests and lint and retains the debug APK for internal testing.
-- Confirm incident data and authentication contracts with the CASAN team before replacing the mock repository or login preview.
+## Physical-device checks
+
+- Use a staging HTTPS environment and a CASAN admin test account. Enter the admin email and password, then tap **Sign in**. Confirm Dashboard opens and Settings shows the admin account. Repeat with a wrong password and airplane mode.
+- Reopen the app after closing its process and confirm the session restores. Sign out and press Back to check the protected screens are inaccessible.
+- On API 33 or newer, open **Settings → Notifications** after sign-in. Exercise Allow and Deny, confirm the system dialog is offered once, and change permission from Android settings. Exercise all three appearance modes and restart the app after each change.
+- Configure the approved CASAN Firebase project with an ignored `app/google-services.json` for package `id.casan.monitor`. Once an approved admin device-registration contract is available, verify initial token retrieval, rotation, retry, account changes, and foreground/background delivery and taps with a physical device. Exercise background delivery with the process stopped by Android as well. Force-stop is a separate Android state.
+- Fresh installs use Critical and High at HIGH and Info at DEFAULT. Android preserves importance for existing channel IDs across upgrades and exposes changes in system notification settings.
+
+## Day 2 verification
+
+Six JVM tests passed using the Kotlin compiler and JUnit directly, including admin payload decoding and request serialization, refresh rotation, expiry and malformed responses, and the existing incident-filter tests. The Android manifest parsed as XML. Gradle sync, debug build, lint, and Android runtime checks were blocked in this workspace by Gradle socket restrictions. No debug APK was generated. Live sign-in, Keystore persistence, navigation, permission handling, and FCM delivery still require Android-device verification.
