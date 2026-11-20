@@ -15,12 +15,14 @@ import id.casan.monitor.core.designsystem.components.*
 import id.casan.monitor.core.designsystem.theme.MonitorTheme
 import id.casan.monitor.core.designsystem.theme.Space
 import id.casan.monitor.data.local.ThemeMode
+import id.casan.monitor.notification.RegistrationStatus
 
 data class SettingsAccount(
     val profile: id.casan.monitor.domain.model.MonitorAccount,
     val notificationsEnabled: Boolean,
     val mayRequestPermission: Boolean,
-    val registration: id.casan.monitor.notification.RegistrationAvailability,
+    val registration: RegistrationStatus,
+    val onRetryRegistration: () -> Unit,
     val onRequestPermission: () -> Unit,
     val onLogout: () -> Unit,
 )
@@ -43,7 +45,8 @@ fun SettingsScreen(
                 SectionHeader("Account")
                 MonitorCard(Modifier.fillMaxWidth()) {
                     if (account.profile.name.isNotBlank()) Text(account.profile.name)
-                    Text(account.profile.email)
+                    if (account.profile.phone.isNotBlank()) Text(account.profile.phone)
+                    if (account.profile.email.isNotBlank()) Text(account.profile.email)
                     OutlinedButton(onClick = account.onLogout) { Text("Sign out") }
                 }
             }
@@ -89,9 +92,16 @@ fun SettingsScreen(
                             Button(onClick = account.onRequestPermission) { Text("Allow notifications") }
                         }
                         Text(when (account.registration) {
-                            id.casan.monitor.notification.RegistrationAvailability.ADMIN_REGISTRATION_UNAVAILABLE ->
-                                "Device registration is unavailable for CASAN admin accounts."
+                            RegistrationStatus.WAITING -> "Waiting to register this device"
+                            RegistrationStatus.OFFLINE -> "Waiting for an internet connection"
+                            RegistrationStatus.REGISTERING -> "Registering this device"
+                            RegistrationStatus.REGISTERED -> "Device registered"
+                            RegistrationStatus.FIREBASE_UNAVAILABLE -> "Firebase is not configured for this build"
+                            RegistrationStatus.FAILED -> "Device registration failed"
                         })
+                        if (account.registration == RegistrationStatus.FAILED) {
+                            TextButton(onClick = account.onRetryRegistration) { Text("Retry registration") }
+                        }
                     }
                 }
             }
@@ -101,8 +111,8 @@ fun SettingsScreen(
                     BrandMark()
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.internal_label), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
                     if (BuildConfig.DEBUG) {
-                        Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
                         Text("Backend " + BuildConfig.BACKEND_URL.ifBlank { "unconfigured" })
                     }
                 }

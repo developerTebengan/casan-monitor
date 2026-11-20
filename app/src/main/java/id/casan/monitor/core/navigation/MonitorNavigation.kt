@@ -5,6 +5,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -20,8 +22,11 @@ import id.casan.monitor.feature.alerts.AlertsScreen
 import id.casan.monitor.feature.dashboard.DashboardScreen
 import id.casan.monitor.feature.history.HistoryScreen
 import id.casan.monitor.feature.notifications.NotificationDetailScreen
+import id.casan.monitor.feature.notifications.NotificationDetailState
 import id.casan.monitor.feature.notifications.NotificationState
 import id.casan.monitor.notification.isNotificationId
+import id.casan.monitor.notification.notificationDetailFor
+import kotlinx.coroutines.flow.Flow
 import id.casan.monitor.feature.settings.SettingsAccount
 import id.casan.monitor.feature.settings.SettingsScreen
 
@@ -35,6 +40,9 @@ private enum class Destination(val route: String, val label: Int, val icon: Int)
 @Composable
 fun MonitorNavigation(
     state: NotificationState,
+    refreshing: Boolean,
+    offline: Boolean,
+    observeDetail: (String) -> Flow<NotificationDetailState>,
     pendingNotification: String?,
     onNotificationOpened: () -> Unit,
     onRead: (String) -> Unit,
@@ -59,15 +67,22 @@ fun MonitorNavigation(
     }
 
     fun openNotification(id: String) {
-        if (isNotificationId(id)) {
-            nav.navigate("notification/$id") { launchSingleTop = true }
-        }
+        if (!isNotificationId(id)) return
+        val current = nav.currentBackStackEntry
+        if (current?.destination?.route == "notification/{id}" && current.arguments?.getString("id") == id) return
+        nav.navigate("notification/$id") { launchSingleTop = true }
     }
 
     LaunchedEffect(pendingNotification) {
-        val id = pendingNotification ?: return@LaunchedEffect
-        select(Destination.ALERTS)
-        openNotification(id)
+        val target = pendingNotification ?: return@LaunchedEffect
+        val id = notificationDetailFor(target, account.profile.id)
+        val current = nav.currentBackStackEntry
+        val alreadyOpen = id != null && current?.destination?.route == "notification/{id}" &&
+            current.arguments?.getString("id") == id
+        if (!alreadyOpen) {
+            select(Destination.ALERTS)
+            if (id != null) openNotification(id)
+        }
         onNotificationOpened()
     }
 
@@ -99,12 +114,14 @@ fun MonitorNavigation(
             startDestination = Destination.DASHBOARD.route,
             modifier = Modifier.padding(padding).consumeWindowInsets(padding).imePadding(),
         ) {
-            composable(Destination.DASHBOARD.route) { DashboardScreen(state, { select(Destination.ALERTS) }, retry, ::openNotification) }
-            composable(Destination.ALERTS.route) { AlertsScreen(state, retry, ::openNotification) }
-            composable(Destination.HISTORY.route) { HistoryScreen(state, retry, ::openNotification) }
+            composable(Destination.DASHBOARD.route) { DashboardScreen(state, offline, { select(Destination.ALERTS) }, retry, ::openNotification) }
+            composable(Destination.ALERTS.route) { AlertsScreen(state, refreshing, offline, retry, ::openNotification) }
+            composable(Destination.HISTORY.route) { HistoryScreen(state, refreshing, offline, retry, ::openNotification) }
             composable("notification/{id}") { detail ->
                 val id = detail.arguments?.getString("id").orEmpty()
-                NotificationDetailScreen(state, id, readErrorId == id, { onRead(id) }, retry) {
+                val flow = remember(id) { observeDetail(id) }
+                val detailState by flow.collectAsStateWithLifecycle(initialValue = NotificationDetailState.Loading)
+                NotificationDetailScreen(detailState, readErrorId == id, { onRead(id) }, retry) {
                     nav.popBackStack()
                 }
             }

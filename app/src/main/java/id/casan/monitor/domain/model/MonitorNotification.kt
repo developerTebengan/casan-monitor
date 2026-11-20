@@ -1,5 +1,7 @@
 package id.casan.monitor.domain.model
 
+const val NOTIFICATION_WINDOW_SIZE = 250
+
 enum class NotificationSeverity(val label: String) {
     CRITICAL("Critical"), HIGH("High"), MEDIUM("Medium"), INFO("Info"),
 }

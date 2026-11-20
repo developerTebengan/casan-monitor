@@ -7,7 +7,6 @@ import java.util.UUID
 
 internal fun parseNotification(
     messageId: String?,
-    sentAt: Long,
     title: String?,
     body: String?,
     type: String?,
@@ -16,16 +15,10 @@ internal fun parseNotification(
 ): MonitorNotification? {
     val message = body?.trim()?.takeIf(String::isNotEmpty) ?: return null
     val headline = title?.trim()?.takeIf(String::isNotEmpty) ?: defaultTitle
-    val identity = when {
-        !messageId.isNullOrBlank() -> "message:$messageId"
-        sentAt > 0 -> "fallback:$sentAt:$headline:$message:$type"
-        else -> UUID.randomUUID().toString()
-    }
+    // Without an upstream ID, identical text may still represent distinct events.
+    val identity = if (messageId.isNullOrBlank()) "local:${UUID.randomUUID()}" else "message:$messageId"
     val id = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }
-    val category = when (type) {
-        "queue_called", "queue_expired" -> NotificationCategory.CHARGING_QUEUE
-        else -> null
-    }
+    val category = NotificationCategory.CHARGING_QUEUE.takeIf { isQueueNotification(type) }
     return MonitorNotification(id, headline, message, category, receivedAt)
 }
 

@@ -2,12 +2,14 @@ package id.casan.monitor.data.local
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteConstraintException
 import android.database.sqlite.SQLiteOpenHelper
 import android.database.sqlite.SQLiteDatabase
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.casan.monitor.BuildConfig
 import id.casan.monitor.domain.model.MonitorNotification
+import id.casan.monitor.domain.model.NOTIFICATION_WINDOW_SIZE
 import id.casan.monitor.domain.model.NotificationCategory
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,21 +46,34 @@ class NotificationDatabase @Inject constructor(@ApplicationContext context: Cont
             SELECT notification_id, title, message, category, received_at, is_read
             FROM notifications WHERE owner = ?
             ORDER BY received_at DESC, notification_id
+            LIMIT $NOTIFICATION_WINDOW_SIZE
             """.trimIndent(),
             arrayOf(owner(accountId)),
         ).use { cursor ->
             buildList {
-                while (cursor.moveToNext()) {
-                    add(
-                        MonitorNotification(
-                            cursor.getString(0), cursor.getString(1), cursor.getString(2),
-                            NotificationCategory.entries.firstOrNull { it.name == cursor.getString(3) },
-                            cursor.getLong(4), cursor.getInt(5) != 0,
-                        ),
-                    )
-                }
+                while (cursor.moveToNext()) add(cursor.notification())
             }
         }
+
+    fun detail(accountId: Long, notificationId: String): MonitorNotification? =
+        readableDatabase.rawQuery(
+            """
+            SELECT notification_id, title, message, category, received_at, is_read
+            FROM notifications WHERE owner = ? AND notification_id = ?
+            """.trimIndent(),
+            arrayOf(owner(accountId), notificationId),
+        ).use { cursor ->
+            if (cursor.moveToFirst()) cursor.notification() else null
+        }
+
+    private fun Cursor.notification() = MonitorNotification(
+        getString(0),
+        getString(1),
+        getString(2),
+        NotificationCategory.entries.firstOrNull { it.name == getString(3) },
+        getLong(4),
+        getInt(5) != 0,
+    )
 
     fun insert(accountId: Long, notification: MonitorNotification): Boolean {
         val values = ContentValues().apply {
@@ -86,5 +101,5 @@ class NotificationDatabase @Inject constructor(@ApplicationContext context: Cont
             arrayOf(owner(accountId), notificationId),
         ) > 0
 
-    private fun owner(accountId: Long) = "${BuildConfig.BACKEND_URL}|$accountId"
+    private fun owner(accountId: Long) = "${BuildConfig.BACKEND_URL}|user|$accountId"
 }

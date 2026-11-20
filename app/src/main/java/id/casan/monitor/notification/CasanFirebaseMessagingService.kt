@@ -1,5 +1,6 @@
 package id.casan.monitor.notification
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.database.sqlite.SQLiteException
@@ -30,9 +31,10 @@ class CasanFirebaseMessagingService : FirebaseMessagingService() {
         // Firebase displays backend notification payloads itself when the app is in the background.
         val payload = message.notification ?: return
         val session = auth.state.value as? AuthState.SignedIn ?: return
-        if (session.expiresAt <= System.currentTimeMillis()) return
+        if (session.expiresAt <= System.currentTimeMillis() || !registration.isAssociated(session.account.id)) return
+        if (isQueueNotification(message.data["type"]) && message.data["user_id"]?.toLongOrNull() != session.account.id) return
         val item = parseNotification(
-            message.messageId, message.sentTime, payload.title, payload.body, message.data["type"],
+            message.messageId, payload.title, payload.body, message.data["type"],
             getString(R.string.app_name), System.currentTimeMillis(),
         ) ?: return
         val inserted = try {
@@ -43,17 +45,20 @@ class CasanFirebaseMessagingService : FirebaseMessagingService() {
         }
         if (!inserted || auth.state.value != session) return
         val manager = NotificationManagerCompat.from(this)
-        if (!manager.areNotificationsEnabled()) return
+        val channel = getString(R.string.channel_info_id)
+        if (!manager.areNotificationsEnabled() ||
+            getSystemService(NotificationManager::class.java).getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE
+        ) return
         val tap = PendingIntent.getActivity(
             this,
             0,
             Intent(this, MainActivity::class.java)
                 .setAction(MainActivity.ACTION_OPEN_NOTIFICATION)
-                .setData(Uri.fromParts("casan-notification", item.id, null))
+                .setData(Uri.fromParts(NOTIFICATION_SCHEME, "user/${session.account.id}/${item.id}", null))
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        val notification = NotificationCompat.Builder(this, getString(R.string.channel_info_id))
+        val notification = NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_bell)
             .setContentTitle(item.title)
             .setContentText(item.message)
@@ -61,6 +66,7 @@ class CasanFirebaseMessagingService : FirebaseMessagingService() {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(tap)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .build()
         try {
             manager.notify(item.id, 0, notification)

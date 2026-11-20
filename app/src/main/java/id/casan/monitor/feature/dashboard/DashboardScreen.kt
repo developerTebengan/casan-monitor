@@ -19,14 +19,18 @@ import id.casan.monitor.feature.notifications.NotificationState
 import id.casan.monitor.feature.notifications.NotificationStorageError
 
 @Composable
-fun DashboardScreen(state: NotificationState, onAlerts: () -> Unit, retry: () -> Unit, onOpen: (String) -> Unit) {
+fun DashboardScreen(state: NotificationState, offline: Boolean, onAlerts: () -> Unit, retry: () -> Unit, onOpen: (String) -> Unit) {
     PageFrame { modifier ->
         LazyColumn(
             modifier,
             contentPadding = PaddingValues(Space.medium),
             verticalArrangement = Arrangement.spacedBy(Space.medium),
         ) {
-            item { PageHeading(stringResource(R.string.overview), "Notifications received on this device") }
+            item {
+                PageHeading(stringResource(R.string.overview), "Notifications received on this device")
+                if (offline) Text("Offline · Saved notifications")
+                TextButton(onClick = retry) { Text("Refresh") }
+            }
             when (state) {
                 NotificationState.Loading -> item { LoadingState() }
                 NotificationState.Error -> item { NotificationStorageError(retry) }

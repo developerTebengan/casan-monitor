@@ -19,6 +19,9 @@ class LocalNotificationRepository @Inject constructor(private val database: Noti
     override fun observe(accountId: Long) =
         revision.map { database.list(accountId) }.flowOn(Dispatchers.IO)
 
+    override fun observeDetail(accountId: Long, notificationId: String) =
+        revision.map { database.detail(accountId, notificationId) }.flowOn(Dispatchers.IO)
+
     // Called on FirebaseMessagingService's worker thread.
     override fun record(accountId: Long, notification: MonitorNotification): Boolean =
         database.insert(accountId, notification).also { inserted ->

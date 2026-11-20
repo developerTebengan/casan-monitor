@@ -35,7 +35,7 @@ class NotificationPayloadTest {
         assertTrue(isNotificationId(first.id))
         assertFalse(isNotificationId("../settings"))
         assertNotEquals(first.id, payload(id = "another/message")?.id)
-        assertEquals(payload(id = null)?.id, payload(id = null)?.id)
+        assertNotEquals(payload(id = null)?.id, payload(id = null)?.id)
     }
 
     @Test
@@ -52,10 +52,30 @@ class NotificationPayloadTest {
         assertTrue(items.filterNotifications(severity = NotificationSeverity.HIGH).isEmpty())
     }
 
+    @Test
+    fun tapTargetsRequireAValidIdAndMatchTheSignedInAccount() {
+        val id = requireNotNull(payload()).id
+        assertEquals(id, notificationDetailFor("user/42/$id", 42))
+        assertNull(notificationDetailFor("user/42/$id", 17))
+        assertNull(notificationDetailFor("invalid/$id", 42))
+        assertNull(notificationDetailFor("user/42/../settings", 42))
+        assertNull(notificationDetailFor("", 42))
+        assertNull(notificationDetailFor(id, 42))
+        assertNull(notificationDetailFor("42/$id", 42))
+    }
+
+    @Test
+    fun onlyDocumentedQueueTypesRouteToAlerts() {
+        assertTrue(isQueueNotification("queue_called"))
+        assertTrue(isQueueNotification("queue_expired"))
+        assertFalse(isQueueNotification("queue_unknown"))
+        assertFalse(isQueueNotification(null))
+    }
+
     private fun payload(
         id: String? = "server/message",
         title: String? = "Queue update",
         body: String? = "Your charger is ready",
         type: String? = null,
-    ) = parseNotification(id, 42, title, body, type, "CASAN Monitor", 1234)
+    ) = parseNotification(id, title, body, type, "CASAN Monitor", 1234)
 }

@@ -1,6 +1,6 @@
 package id.casan.monitor.domain.model
 
-data class MonitorAccount(val id: Long, val name: String, val email: String)
+data class MonitorAccount(val id: Long, val name: String, val email: String, val phone: String)
 
 class MonitorSession(
     val account: MonitorAccount,

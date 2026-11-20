@@ -7,17 +7,14 @@ import org.junit.Test
 
 class AuthDtosTest {
     private val gson = Gson()
-    private val account = MonitorAccount(42, "Operator", "ops@example.test")
+    private val account = MonitorAccount(42, "Operator", "ops@example.test", "+6281234567890")
 
     @Test
-    fun decodesAdminLoginEnvelopeAndSecondsBasedExpiry() {
-        val envelope = decode(
-            """{"status":"success","data":{"token":"access","refresh_token":"refresh","expires_in":60,
-                "admin":{"ID":42,"Name":"Operator","Email":"ops@example.test"}}}""",
+    fun decodesUserLoginEnvelopeAndExpiry() {
+        val response = decode(
+            """{"status":"success","data":{"token":"access","refresh_token":"refresh","expires_in":60}}""",
         )
-
-        val session = requireNotNull(envelope.toSession(now = 1000))
-
+        val session = requireNotNull(response.toSession(account, now = 1000))
         assertEquals(account, session.account)
         assertEquals("access", session.accessToken)
         assertEquals("refresh", session.refreshToken)
@@ -26,11 +23,22 @@ class AuthDtosTest {
     }
 
     @Test
-    fun refreshKeepsAccountAndReplacesBothCredentials() {
-        val envelope = decode(
+    fun mapsOnlyRequiredFieldsFromAuthenticatedProfile() {
+        val response = gson.fromJson(
+            """{"status":"success","data":{"ID":42,"Name":"Operator","Email":"ops@example.test",
+                "Phone":"+6281234567890","NIK":"ignored"}}""",
+            UserEnvelope::class.java,
+        )
+        assertEquals(account, response.toAccount())
+        assertNull(UserEnvelope("success", UserResponse(0, null, null, null)).toAccount())
+    }
+
+    @Test
+    fun refreshPreservesAccountAndRotatesCredentials() {
+        val response = decode(
             """{"status":"success","data":{"token":"replacement","refresh_token":"rotated","expires_in":5}}""",
         )
-        val session = requireNotNull(envelope.toSession(account, now = 0))
+        val session = requireNotNull(response.toSession(account, now = 0))
         assertEquals(account, session.account)
         assertEquals("replacement", session.accessToken)
         assertEquals("rotated", session.refreshToken)
@@ -38,25 +46,23 @@ class AuthDtosTest {
     }
 
     @Test
-    fun rejectsFailedOrMalformedResponses() {
+    fun rejectsMalformedTokenPairs() {
         assertNull(decode("""{"status":"error"}""").toSession(account))
         assertNull(
             decode("""{"status":"success","data":{"token":"a","refresh_token":"b","expires_in":0}}""")
                 .toSession(account),
         )
-        assertNull(
-            decode("""{"status":"success","data":{"token":"a","expires_in":60}}""")
-                .toSession(account),
-        )
     }
 
     @Test
-    fun serializesExactAdminLoginAndRefreshRequestFields() {
+    fun serializesTheExistingOtpAndFirebaseContracts() {
+        assertEquals("""{"phone_number":"+6281234567890","channel":2}""", gson.toJson(SendOtpRequest(account.phone, 2)))
         assertEquals(
-            """{"email":"ops@example.test","password":"example"}""",
-            gson.toJson(LoginRequest(account.email, "example")),
+            """{"phone_number":"+6281234567890","code":"0123","channel":1}""",
+            gson.toJson(LoginRequest(account.phone, "0123", 1)),
         )
         assertEquals("""{"refresh_token":"refresh"}""", gson.toJson(RefreshRequest("refresh")))
+        assertEquals("""{"token":"test-token","platform":"android"}""", gson.toJson(FirebaseTokenRequest("test-token")))
     }
 
     private fun decode(json: String): AuthEnvelope = gson.fromJson(json, AuthEnvelope::class.java)

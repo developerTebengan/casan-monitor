@@ -14,7 +14,13 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class AuthUiState(val loading: Boolean = false, val error: AuthError? = null)
+data class OtpDestination(val phone: String, val channel: Int)
+
+data class AuthUiState(
+    val loading: Boolean = false,
+    val error: AuthError? = null,
+    val sentTo: OtpDestination? = null,
+)
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(private val repository: AuthRepository) : ViewModel() {
@@ -44,11 +50,26 @@ class LoginViewModel @Inject constructor(private val repository: AuthRepository)
         sessionCheck = viewModelScope.launch { repository.restore() }
     }
 
-    fun login(email: String, password: String) {
-        if (mutableUi.value.loading) return
-        mutableUi.value = AuthUiState(loading = true)
+    fun sendOtp(phone: String, channel: Int) {
+        val current = mutableUi.value
+        if (current.loading) return
+        mutableUi.value = current.copy(loading = true, error = null)
         viewModelScope.launch {
-            mutableUi.value = AuthUiState(error = repository.login(email, password))
+            val error = repository.sendOtp(phone, channel)
+            mutableUi.value = current.copy(
+                error = error,
+                sentTo = if (error == null) OtpDestination(phone, channel) else current.sentTo,
+            )
+        }
+    }
+
+    fun login(phone: String, code: String, channel: Int) {
+        val current = mutableUi.value
+        if (current.loading) return
+        mutableUi.value = current.copy(loading = true, error = null)
+        viewModelScope.launch {
+            val error = repository.login(phone, code, channel)
+            mutableUi.value = if (error == null) AuthUiState() else current.copy(error = error)
         }
     }
 
@@ -60,7 +81,9 @@ class LoginViewModel @Inject constructor(private val repository: AuthRepository)
 
 fun AuthError.message(): String = when (this) {
     AuthError.CONFIGURATION -> "This build has no CASAN backend configured."
-    AuthError.CREDENTIALS -> "Check your CASAN admin email and password."
+    AuthError.CREDENTIALS -> "The verification code is incorrect or expired, or the account is inactive."
+    AuthError.RATE_LIMIT -> "Wait at least 30 seconds before requesting another code."
+    AuthError.FORBIDDEN -> "CASAN rejected this request. Check your details and try again."
     AuthError.TIMEOUT -> "The server took too long to respond. Try again."
     AuthError.NETWORK -> "Could not reach CASAN. Check your connection and try again."
     AuthError.SERVER -> "CASAN could not process the request. Try again."
