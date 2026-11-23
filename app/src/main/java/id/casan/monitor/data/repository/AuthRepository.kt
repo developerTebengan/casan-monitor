@@ -16,6 +16,7 @@ import id.casan.monitor.data.remote.toSession
 import id.casan.monitor.domain.model.MonitorAccount
 import id.casan.monitor.domain.model.MonitorSession
 import id.casan.monitor.notification.MonitorDeviceRegistration
+import id.casan.monitor.notification.NotificationDiagnostics
 import id.casan.monitor.notification.awaitResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class AuthRepository @Inject constructor(
     private val api: AuthApi,
     private val storage: SessionManager,
     private val registration: MonitorDeviceRegistration,
+    private val diagnostics: NotificationDiagnostics,
     @ApplicationContext private val context: Context,
 ) {
     private val lock = Mutex()
@@ -167,10 +169,12 @@ class AuthRepository @Inject constructor(
         loaded = true
         mutableState.value = AuthState.SignedOut
         registration.clearAssociation()
+        diagnostics.clear()
         context.getSystemService(NotificationManager::class.java).cancelAll()
     }
 
     private fun publish(session: MonitorSession) {
+        diagnostics.activate(session.account.id)
         mutableState.value = AuthState.SignedIn(session.account, session.expiresAt)
     }
 

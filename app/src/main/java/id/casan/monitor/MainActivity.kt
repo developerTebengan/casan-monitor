@@ -49,6 +49,7 @@ import id.casan.monitor.feature.notifications.NotificationCenterViewModel
 import id.casan.monitor.feature.notifications.NotificationState
 import id.casan.monitor.feature.settings.SettingsAccount
 import id.casan.monitor.notification.MonitorDeviceRegistration
+import id.casan.monitor.notification.NotificationDiagnostics
 import id.casan.monitor.notification.NOTIFICATION_SCHEME
 import id.casan.monitor.notification.isQueueNotification
 import kotlinx.coroutines.launch
@@ -58,6 +59,7 @@ import id.casan.monitor.feature.settings.SettingsViewModel
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var registration: MonitorDeviceRegistration
+    @Inject lateinit var diagnostics: NotificationDiagnostics
     private val auth: LoginViewModel by viewModels()
     private val online = mutableStateOf(true)
     private var lastConnectivity: Boolean? = null
@@ -143,6 +145,10 @@ class MainActivity : ComponentActivity() {
                         val readError by notifications.readError.collectAsStateWithLifecycle()
                         val refreshing by notifications.refreshing.collectAsStateWithLifecycle()
                         val registrationStatus by registration.status.collectAsStateWithLifecycle()
+                        val diagnosticState = if (BuildConfig.DEBUG) {
+                            val snapshot by diagnostics.state.collectAsStateWithLifecycle()
+                            snapshot.takeIf { it.accountId == current.account.id }
+                        } else null
                         MonitorNavigation(
                             state = state,
                             refreshing = refreshing,
@@ -151,6 +157,7 @@ class MainActivity : ComponentActivity() {
                             pendingNotification = pendingNotification.value,
                             onNotificationOpened = { pendingNotification.value = null },
                             onRead = { notifications.markRead(current.account.id, it) },
+                            onDetailShown = { diagnostics.opened(current.account.id, it) },
                             readErrorId = readError?.takeIf { it.first == current.account.id }?.second,
                             mode = theme,
                             onTheme = settings::setTheme,
@@ -165,6 +172,7 @@ class MainActivity : ComponentActivity() {
                                 registration::requestSync,
                                 ::requestNotifications,
                                 auth::logout,
+                                diagnosticState,
                             ),
                         )
                     }
@@ -175,10 +183,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (BuildConfig.DEBUG) diagnostics.activityResumed = true
         updatePermissionStatus()
         notifications.refresh()
         val current = auth.session.value as? AuthState.SignedIn
         if (current != null && current.expiresAt <= System.currentTimeMillis()) auth.restore()
+    }
+
+    override fun onPause() {
+        if (BuildConfig.DEBUG) diagnostics.activityResumed = false
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {

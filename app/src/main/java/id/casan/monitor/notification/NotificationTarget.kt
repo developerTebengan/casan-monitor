@@ -8,5 +8,8 @@ internal fun notificationDetailFor(target: String, accountId: Long): String? {
     return target.removePrefix(prefix).takeIf(::isNotificationId)
 }
 
+internal fun notificationTapTarget(accountId: Long, id: String, cached: Boolean): String =
+    if (cached) "admin/$accountId/$id" else id
+
 internal fun isQueueNotification(type: String?): Boolean =
     type == "queue_called" || type == "queue_expired"

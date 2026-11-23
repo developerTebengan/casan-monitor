@@ -16,6 +16,9 @@ import id.casan.monitor.core.designsystem.theme.MonitorTheme
 import id.casan.monitor.core.designsystem.theme.Space
 import id.casan.monitor.data.local.ThemeMode
 import id.casan.monitor.notification.RegistrationStatus
+import id.casan.monitor.notification.NotificationDiagnosticState
+import id.casan.monitor.notification.TrayResult
+import id.casan.monitor.feature.notifications.notificationTime
 
 data class SettingsAccount(
     val profile: id.casan.monitor.domain.model.MonitorAccount,
@@ -26,6 +29,7 @@ data class SettingsAccount(
     val onRetryRegistration: () -> Unit,
     val onRequestPermission: () -> Unit,
     val onLogout: () -> Unit,
+    val diagnostics: NotificationDiagnosticState? = null,
 )
 
 @Composable
@@ -104,6 +108,31 @@ fun SettingsScreen(
                         if (account.registration == RegistrationStatus.FAILED) {
                             TextButton(onClick = account.onRetryRegistration) { Text("Retry registration") }
                         }
+                    }
+                }
+            }
+            if (BuildConfig.DEBUG && account != null) item {
+                SectionHeader("Notification diagnostics")
+                MonitorCard(Modifier.fillMaxWidth()) {
+                    val receipt = account.diagnostics?.receipt
+                    if (receipt == null) {
+                        Text("No FCM callback recorded for this session.")
+                    } else {
+                        Text("FCM message received " + notificationTime(receipt.receivedAt))
+                        Text(if (receipt.activityResumed) "Activity resumed" else "Activity not resumed")
+                        receipt.reference?.let { Text("Reference $it") }
+                        Text("Payload " + receipt.payload.name.lowercase().replace('_', ' '))
+                        receipt.cache?.let { Text("Cache " + it.name.lowercase()) }
+                        receipt.channel?.let { Text("Channel $it") }
+                        receipt.tray?.let { tray ->
+                            Text(if (tray == TrayResult.POSTED) "Tray post requested" else
+                                "Tray " + tray.name.lowercase().replace('_', ' '))
+                        }
+                        receipt.postedAt?.let { Text("Posted " + notificationTime(it)) }
+                    }
+                    account.diagnostics?.opened?.let {
+                        Text("Detail opened " + notificationTime(it.openedAt))
+                        Text("Opened reference " + it.reference)
                     }
                 }
             }

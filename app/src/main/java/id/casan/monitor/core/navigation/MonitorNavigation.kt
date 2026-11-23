@@ -46,6 +46,7 @@ fun MonitorNavigation(
     pendingNotification: String?,
     onNotificationOpened: () -> Unit,
     onRead: (String) -> Unit,
+    onDetailShown: (String) -> Unit,
     readErrorId: String?,
     mode: ThemeMode,
     onTheme: (ThemeMode) -> Unit,
@@ -121,6 +122,10 @@ fun MonitorNavigation(
                 val id = detail.arguments?.getString("id").orEmpty()
                 val flow = remember(id) { observeDetail(id) }
                 val detailState by flow.collectAsStateWithLifecycle(initialValue = NotificationDetailState.Loading)
+                val loadedId = (detailState as? NotificationDetailState.Content)?.item?.id
+                LaunchedEffect(loadedId) {
+                    loadedId?.let(onDetailShown)
+                }
                 NotificationDetailScreen(detailState, readErrorId == id, { onRead(id) }, retry) {
                     nav.popBackStack()
                 }
