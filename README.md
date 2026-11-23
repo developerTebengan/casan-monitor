@@ -4,6 +4,10 @@ CASAN Monitor is a native Android app for internal engineering and operations. C
 
 See the [Day 5 test report](docs/DAY5_TEST_REPORT.md) for verification results, release signing, and the device test procedure.
 
+## MVP release handover
+
+Start with the [Day 10 readiness decision](docs/DAY10_RELEASE_READINESS.md), [Engineering handover](docs/DAY10_ENGINEERING_HANDOVER.md), and [internal installation guide](docs/DAY10_INTERNAL_INSTALLATION_GUIDE.md).
+
 ## Build and run
 
 1. Open this directory in Android Studio with AGP 9.3 support. The Gradle daemon toolchain requests JetBrains JDK 25. The app targets Java and Kotlin JVM 17. Install Android SDK Platform 37.1, Build-Tools 36.0.0, and Platform-Tools.
