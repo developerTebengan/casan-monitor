@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -21,7 +22,11 @@ import javax.inject.Inject
 sealed interface NotificationState {
     data object Loading : NotificationState
     data object Error : NotificationState
-    data class Content(val items: List<MonitorNotification>) : NotificationState {
+    data class Content(
+        val items: List<MonitorNotification>,
+        val lastLoadedAt: Long? = null,
+        val refreshFailed: Boolean = false,
+    ) : NotificationState {
         val unreadCount = items.count { !it.isRead }
     }
 }
@@ -42,9 +47,8 @@ class NotificationCenterViewModel @Inject constructor(private val repository: No
     val readError = readFailure.asStateFlow()
 
     fun observe(accountId: Long): Flow<NotificationState> =
-        reloadOnRequest(NotificationState.Error) {
-            repository.observe(accountId).map { NotificationState.Content(it) }
-        }.onEach { refreshingState.value = false }
+        observeNotificationList(accountId, repository, retrySignal)
+            .onEach { refreshingState.value = false }
 
     fun observeDetail(accountId: Long, id: String): Flow<NotificationDetailState> =
         reloadOnRequest(NotificationDetailState.Error) {
@@ -74,5 +78,27 @@ class NotificationCenterViewModel @Inject constructor(private val repository: No
                 readFailure.value = accountId to notificationId
             }
         }
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun observeNotificationList(
+    accountId: Long,
+    repository: NotificationRepository,
+    refreshes: Flow<Int>,
+    now: () -> Long = System::currentTimeMillis,
+): Flow<NotificationState> = flow {
+    // Each collector starts with its own account snapshot.
+    var lastLoaded: NotificationState.Content? = null
+    refreshes.flatMapLatest {
+        repository.observe(accountId)
+            .map<List<MonitorNotification>, NotificationState> { NotificationState.Content(it, now()) }
+            .catch { failure ->
+                if (failure !is SQLiteException) throw failure
+                emit(NotificationState.Error)
+            }
+    }.collect { result ->
+        if (result is NotificationState.Content) lastLoaded = result
+        emit(if (result == NotificationState.Error) lastLoaded?.copy(refreshFailed = true) ?: result else result)
     }
 }

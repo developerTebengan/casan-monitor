@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var registration: MonitorDeviceRegistration
     private val auth: LoginViewModel by viewModels()
     private val online = mutableStateOf(true)
+    private var lastConnectivity: Boolean? = null
     private val notificationsEnabled = mutableStateOf(false)
     private val infoChannelBlocked = mutableStateOf(false)
     private val canRequestNotifications = mutableStateOf(false)
@@ -83,9 +84,11 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 getSystemService(ConnectivityManager::class.java).validatedConnectivity().collect { connected ->
+                    val reconnected = connected && lastConnectivity == false
+                    lastConnectivity = connected
                     online.value = connected
+                    if (reconnected) notifications.refresh()
                     if (connected) {
-                        notifications.refresh()
                         val state = auth.session.value
                         if (state is AuthState.Unavailable && state.error.isTransientConnectionFailure()) {
                             auth.restore()

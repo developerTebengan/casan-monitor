@@ -13,10 +13,10 @@ import androidx.compose.ui.unit.dp
 import id.casan.monitor.R
 import id.casan.monitor.core.designsystem.components.*
 import id.casan.monitor.core.designsystem.theme.*
-import id.casan.monitor.domain.model.NotificationSeverity
 import id.casan.monitor.feature.notifications.NotificationCard
 import id.casan.monitor.feature.notifications.NotificationState
 import id.casan.monitor.feature.notifications.NotificationStorageError
+import id.casan.monitor.feature.notifications.notificationTime
 
 @Composable
 fun DashboardScreen(state: NotificationState, offline: Boolean, onAlerts: () -> Unit, retry: () -> Unit, onOpen: (String) -> Unit) {
@@ -35,7 +35,13 @@ fun DashboardScreen(state: NotificationState, offline: Boolean, onAlerts: () -> 
                 NotificationState.Loading -> item { LoadingState() }
                 NotificationState.Error -> item { NotificationStorageError(retry) }
                 is NotificationState.Content -> {
-                    item { NotificationSummary(state) }
+                    if (state.refreshFailed) item { NotificationStorageError(retry, showingSaved = true) }
+                    item {
+                        NotificationSummary(state)
+                        state.lastLoadedAt?.let {
+                            Text("Last local refresh " + notificationTime(it))
+                        }
+                    }
                     item {
                         SectionHeader("Recent notifications") {
                             TextButton(onClick = onAlerts) { Text(stringResource(R.string.view_all)) }
@@ -55,8 +61,7 @@ fun DashboardScreen(state: NotificationState, offline: Boolean, onAlerts: () -> 
 private fun NotificationSummary(state: NotificationState.Content) {
     val cards: @Composable (Modifier) -> Unit = { modifier ->
         IncidentSummaryCard("Unread", state.unreadCount, Success, R.drawable.ic_bell, modifier)
-        IncidentSummaryCard("Critical", state.items.count { it.severity == NotificationSeverity.CRITICAL }, Critical, R.drawable.ic_warning, modifier)
-        IncidentSummaryCard("High", state.items.count { it.severity == NotificationSeverity.HIGH }, Warning, R.drawable.ic_bell, modifier)
+        IncidentSummaryCard("Recent", state.items.size, Brand, R.drawable.ic_history, modifier)
     }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         if (maxWidth >= 312.dp && LocalDensity.current.fontScale <= 1.3f) {

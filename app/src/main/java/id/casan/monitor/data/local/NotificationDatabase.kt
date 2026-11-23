@@ -87,8 +87,9 @@ class NotificationDatabase @Inject constructor(@ApplicationContext context: Cont
         return try {
             writableDatabase.insertOrThrow("notifications", null, values)
             true
-        } catch (_: SQLiteConstraintException) {
-            // A redelivery preserves the original timestamp and read state.
+        } catch (failure: SQLiteConstraintException) {
+            // Only an existing row for the same owner and ID is a redelivery.
+            if (detail(accountId, notification.id) == null) throw failure
             false
         }
     }

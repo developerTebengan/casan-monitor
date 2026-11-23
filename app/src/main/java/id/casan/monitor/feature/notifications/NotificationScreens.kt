@@ -12,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +50,15 @@ fun NotificationListScreen(
     var categoryName by rememberSaveable { mutableStateOf<String?>(null) }
     val severity = NotificationSeverity.entries.firstOrNull { it.name == severityName }
     val category = NotificationCategory.entries.firstOrNull { it.name == categoryName }
+    val savedItems = (state as? NotificationState.Content)?.items.orEmpty()
+    val matching = remember(savedItems, query, severity, category) {
+        savedItems.filterNotifications(query, severity, category)
+    }
+    val zone = ZoneId.systemDefault()
+    val groups = remember(history, matching, zone) {
+        if (history) matching.groupBy { Instant.ofEpochMilli(it.receivedAt).atZone(zone).toLocalDate() }
+        else emptyMap()
+    }
 
     PageFrame { modifier ->
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = modifier) {
@@ -67,6 +78,9 @@ fun NotificationListScreen(
                         Text("Showing the latest $NOTIFICATION_WINDOW_SIZE notifications")
                     }
                 }
+                if ((state as? NotificationState.Content)?.refreshFailed == true) item {
+                    NotificationStorageError(onRefresh, showingSaved = true)
+                }
                 if (!history) item {
                     OutlinedTextField(
                         value = query,
@@ -74,6 +88,9 @@ fun NotificationListScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text(stringResource(R.string.search_alerts)) },
                         leadingIcon = { MonitorIcon(R.drawable.ic_search) },
+                        trailingIcon = if (query.isNotEmpty()) {
+                            { TextButton(onClick = { query = "" }) { Text("Clear") } }
+                        } else null,
                         singleLine = true,
                     )
                 }
@@ -102,7 +119,6 @@ fun NotificationListScreen(
                     NotificationState.Loading -> item { LoadingState() }
                     NotificationState.Error -> item { NotificationStorageError(onRefresh) }
                     is NotificationState.Content -> {
-                        val matching = state.items.filterNotifications(query, severity, category)
                         when {
                             state.items.isEmpty() -> item {
                                 EmptyState("No notifications yet", "Messages received by the app will appear here.")
@@ -111,8 +127,6 @@ fun NotificationListScreen(
                                 EmptyState("No matching notifications", "Try changing your search or filters.")
                             }
                             history -> {
-                                val zone = ZoneId.systemDefault()
-                                val groups = matching.groupBy { Instant.ofEpochMilli(it.receivedAt).atZone(zone).toLocalDate() }
                                 groups.forEach { (day, notifications) ->
                                     item(key = "date-$day") {
                                         SectionHeader(day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)))
@@ -142,8 +156,8 @@ fun NotificationCard(notification: MonitorNotification, onOpen: (String) -> Unit
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            NotificationPriority(notification.severity)
         }
+        SeverityBadge(notification.severity)
         Text(notification.message, maxLines = 2, overflow = TextOverflow.Ellipsis)
         notification.category?.let { Text(it.label, style = MaterialTheme.typography.labelMedium) }
         Text(
@@ -182,12 +196,17 @@ fun NotificationDetailScreen(
                     } else {
                         MonitorCard(Modifier.fillMaxWidth()) {
                             Text(notification.title, style = MaterialTheme.typography.headlineSmall)
-                            NotificationPriority(notification.severity)
-                            notification.category?.let { Text(it.label) }
-                            Text(notificationTime(notification.receivedAt))
-                            Text(if (notification.isRead) "Read" else "Unread")
-                            HorizontalDivider()
+                            SeverityBadge(notification.severity)
+                        }
+                        MonitorCard(Modifier.fillMaxWidth()) {
+                            Text("Message", style = MaterialTheme.typography.titleMedium)
                             Text(notification.message)
+                        }
+                        MonitorCard(Modifier.fillMaxWidth()) {
+                            Text("Delivery details", style = MaterialTheme.typography.titleMedium)
+                            Text("Received " + notificationTime(notification.receivedAt))
+                            notification.category?.let { Text(it.label) }
+                            Text(if (notification.isRead) "Read" else "Unread")
                             if (!notification.isRead && readFailed) {
                                 Text("Could not save read status.")
                                 TextButton(onClick = onRead) { Text("Retry") }
@@ -201,37 +220,40 @@ fun NotificationDetailScreen(
 }
 
 @Composable
-private fun NotificationPriority(severity: NotificationSeverity) {
-    val colors = MaterialTheme.colorScheme
-    val background = when (severity) {
-        NotificationSeverity.CRITICAL -> colors.errorContainer
-        NotificationSeverity.HIGH -> colors.tertiaryContainer
-        NotificationSeverity.MEDIUM, NotificationSeverity.INFO -> colors.secondaryContainer
-    }
-    val foreground = when (severity) {
-        NotificationSeverity.CRITICAL -> colors.onErrorContainer
-        NotificationSeverity.HIGH -> colors.onTertiaryContainer
-        NotificationSeverity.MEDIUM, NotificationSeverity.INFO -> colors.onSecondaryContainer
+private fun SeverityBadge(severity: NotificationSeverity) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val (background, foreground) = when (severity) {
+        NotificationSeverity.CRITICAL -> if (dark) Color(0xFF5C2023) to Color(0xFFFFCDCB)
+            else Color(0xFFFFE2E0) to Color(0xFF8C161E)
+        NotificationSeverity.HIGH -> if (dark) Color(0xFF5B2D10) to Color(0xFFFFD0AE)
+            else Color(0xFFFFE7D5) to Color(0xFF813606)
+        NotificationSeverity.MEDIUM -> if (dark) Color(0xFF4B380B) to Color(0xFFFFDF8E)
+            else Color(0xFFFFEFBD) to Color(0xFF654400)
+        NotificationSeverity.INFO -> if (dark) Color(0xFF1C3851) to Color(0xFFCAE6FF)
+            else Color(0xFFE1EFFD) to Color(0xFF214974)
     }
     Surface(shape = MaterialTheme.shapes.small, color = background, contentColor = foreground) {
         Text(
             severity.label,
-            modifier = Modifier.padding(horizontal = Space.small),
+            modifier = Modifier.padding(horizontal = Space.small, vertical = Space.small / 2),
             style = MaterialTheme.typography.labelMedium,
         )
     }
 }
 
 @Composable
-fun NotificationStorageError(retry: () -> Unit) {
+fun NotificationStorageError(retry: () -> Unit, showingSaved: Boolean = false) {
     MonitorCard(Modifier.fillMaxWidth()) {
-        Text("Could not load notifications", style = MaterialTheme.typography.titleMedium)
+        Text(
+            if (showingSaved) "Could not refresh saved notifications" else "Could not load notifications",
+            style = MaterialTheme.typography.titleMedium,
+        )
         TextButton(onClick = retry) { Text("Retry") }
     }
 }
 
 @Composable
-private fun notificationTime(timestamp: Long): String = remember(timestamp) {
+internal fun notificationTime(timestamp: Long): String = remember(timestamp) {
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(timestamp))
 }
 
