@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -94,7 +95,7 @@ internal suspend fun <T> Task<T>.awaitResult(): T =
         addOnCompleteListener { task ->
             when {
                 task.isSuccessful -> continuation.resume(task.result)
-                task.isCanceled -> continuation.cancel()
+                task.isCanceled -> continuation.resumeWithException(IOException("Firebase operation canceled"))
                 else -> continuation.resumeWithException(task.exception ?: IllegalStateException("Firebase operation failed"))
             }
         }

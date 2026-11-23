@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
         updatePermissionStatus()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { auth.monitorSessionExpiry() }
                 getSystemService(ConnectivityManager::class.java).validatedConnectivity().collect { connected ->
                     val reconnected = connected && lastConnectivity == false
                     lastConnectivity = connected

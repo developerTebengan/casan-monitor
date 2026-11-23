@@ -13,10 +13,10 @@ if (layout.projectDirectory.file("google-services.json").asFile.isFile) {
 
 val configuredBackendUrl = providers.gradleProperty("casanBackendUrl").orElse("").get()
 val debugBackendUrl = providers.gradleProperty("casanDebugBackendUrl")
-    .orElse(configuredBackendUrl.ifBlank { "http://127.0.0.1:8080/" }).get()
+    .orElse("http://127.0.0.1:8080/").get()
 
 fun validateBackendUrl(value: String, allowLoopbackHttp: Boolean = false) {
-    if (value.isEmpty()) return
+    if (value.isEmpty() && !allowLoopbackHttp) return
     val url = URI(value)
     val allowedScheme = url.scheme == "https" ||
         (allowLoopbackHttp && url.scheme == "http" && url.host == "127.0.0.1")
@@ -48,7 +48,7 @@ android {
         applicationId = "id.casan.monitor"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
+        versionCode = 2
         versionName = "0.1.0"
     }
 

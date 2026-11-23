@@ -8,7 +8,7 @@ See the [Day 5 test report](docs/DAY5_TEST_REPORT.md) for verification results, 
 
 1. Open this directory in Android Studio with AGP 9.3 support. The Gradle daemon toolchain requests JetBrains JDK 25. The app targets Java and Kotlin JVM 17. Install Android SDK Platform 37.1, Build-Tools 36.0.0, and Platform-Tools.
 2. Start the CASAN backend locally on port 8080 using its local development configuration. Debug defaults to `http://127.0.0.1:8080/`. Connect the emulator or device and run `adb reverse tcp:8080 tcp:8080` so Android can reach the backend on your computer.
-3. Sync Gradle and run the `app` configuration on an API 26 or newer emulator or physical device. For another environment, set `casanBackendUrl=https://<your-casan-environment>/` in your user Gradle properties. Use the service base URL above `api/`, with a trailing slash. To override only debug, set `casanDebugBackendUrl`. Release accepts HTTPS only and requires `casanBackendUrl` for sign-in.
+3. Sync Gradle and run the `app` configuration on an API 26 or newer emulator or physical device. For staging debug builds, set `casanDebugBackendUrl` to the approved staging HTTPS base URL in user Gradle properties. Use the service base URL above `api/`, with a trailing slash. Release uses `casanBackendUrl` and accepts HTTPS only. Debug defaults to loopback.
 
 ```sh
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug

@@ -28,16 +28,17 @@ class LoginViewModel @Inject constructor(private val repository: AuthRepository)
 
     init {
         restore()
-        viewModelScope.launch {
-            session.collectLatest { state ->
-                if (state is AuthState.SignedIn) {
-                    while (true) {
-                        val remaining = state.expiresAt - System.currentTimeMillis()
-                        if (remaining <= 0) break
-                        delay(remaining.coerceAtMost(60_000))
-                    }
-                    restore()
+    }
+
+    suspend fun monitorSessionExpiry() {
+        session.collectLatest { state ->
+            if (state is AuthState.SignedIn) {
+                while (true) {
+                    val remaining = state.expiresAt - System.currentTimeMillis()
+                    if (remaining <= 0) break
+                    delay(remaining.coerceAtMost(60_000))
                 }
+                restore()
             }
         }
     }
