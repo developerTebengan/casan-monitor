@@ -1,5 +1,6 @@
 package id.casan.monitor.feature.settings
 
+import android.os.Build
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -142,7 +143,8 @@ fun SettingsScreen(
                     BrandMark()
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.internal_label), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
+                    Text(stringResource(R.string.version, "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"))
+                    Text("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                     if (BuildConfig.DEBUG) {
                         Text("Backend " + BuildConfig.BACKEND_URL.ifBlank { "unconfigured" })
                     }

@@ -48,8 +48,8 @@ android {
         applicationId = "id.casan.monitor"
         minSdk = 26
         targetSdk = 37
-        versionCode = 3
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.1.1"
     }
 
     signingConfigs {
