@@ -55,10 +55,11 @@ class NotificationPayloadTest {
     @Test
     fun tapTargetsRequireAValidIdAndMatchTheSignedInAccount() {
         val id = requireNotNull(payload()).id
-        assertEquals(id, notificationDetailFor("user/42/$id", 42))
-        assertNull(notificationDetailFor("user/42/$id", 17))
+        assertEquals(id, notificationDetailFor("admin/42/$id", 42))
+        assertNull(notificationDetailFor("admin/42/$id", 17))
         assertNull(notificationDetailFor("invalid/$id", 42))
-        assertNull(notificationDetailFor("user/42/../settings", 42))
+        assertNull(notificationDetailFor("user/42/$id", 42))
+        assertNull(notificationDetailFor("admin/42/../settings", 42))
         assertNull(notificationDetailFor("", 42))
         assertNull(notificationDetailFor(id, 42))
         assertNull(notificationDetailFor("42/$id", 42))

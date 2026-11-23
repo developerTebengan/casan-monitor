@@ -29,7 +29,7 @@ class SessionManager @Inject constructor(@ApplicationContext context: Context) {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes, 0, IV_LENGTH))
             val json = JSONObject(String(cipher.doFinal(bytes, IV_LENGTH, bytes.size - IV_LENGTH), Charsets.UTF_8))
-            if (json.optString("principal") != "user" || json.getString("backend") != BuildConfig.BACKEND_URL) {
+            if (json.optString("principal") != "admin" || json.getString("backend") != BuildConfig.BACKEND_URL) {
                 clear()
                 return null
             }
@@ -48,7 +48,7 @@ class SessionManager @Inject constructor(@ApplicationContext context: Context) {
     fun write(session: MonitorSession) {
         val json = JSONObject().apply {
             put("backend", BuildConfig.BACKEND_URL)
-            put("principal", "user")
+            put("principal", "admin")
             put("id", session.account.id)
             put("name", session.account.name)
             put("email", session.account.email)

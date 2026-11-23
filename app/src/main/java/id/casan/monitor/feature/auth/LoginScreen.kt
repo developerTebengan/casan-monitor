@@ -1,5 +1,6 @@
 package id.casan.monitor.feature.auth
 
+import android.util.Patterns
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -20,30 +21,23 @@ import id.casan.monitor.core.designsystem.components.*
 import id.casan.monitor.core.designsystem.theme.MonitorTheme
 import id.casan.monitor.core.designsystem.theme.Space
 
-private val internationalPhone = Regex("^\\+[1-9][0-9]{1,14}$")
-
 @Composable
 fun LoginScreen(
     state: AuthUiState,
-    onSendOtp: (String, Int) -> Unit,
-    onLogin: (String, String, Int) -> Unit,
+    onLogin: (String, String) -> Unit,
 ) {
-    var phone by rememberSaveable { mutableStateOf("") }
-    var channel by rememberSaveable { mutableIntStateOf(2) }
-    var code by remember { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     val focus = LocalFocusManager.current
-    val normalizedPhone = loginPhoneNumber(phone)
-    val existingOtp = usesExistingOtp(normalizedPhone)
-    val validPhone = internationalPhone.matches(normalizedPhone)
-    val sent = state.sentTo == OtpDestination(normalizedPhone, channel)
-    val showCodeEntry = existingOtp || sent
-    val canSubmit = showCodeEntry && !state.loading && validPhone && code.length == 4
+    val address = email.trim()
+    val validEmail = Patterns.EMAIL_ADDRESS.matcher(address).matches()
+    val canSubmit = !state.loading && validEmail && password.isNotEmpty()
 
     fun submit() {
         if (!canSubmit) return
         focus.clearFocus()
-        onLogin(normalizedPhone, code, channel)
-        code = ""
+        onLogin(address, password)
+        password = ""
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -56,57 +50,27 @@ fun LoginScreen(
                 PageHeading(stringResource(R.string.app_name), stringResource(R.string.login_intro))
                 MonitorCard(Modifier.fillMaxWidth()) {
                     OutlinedTextField(
-                        value = phone,
-                        onValueChange = {
-                            phone = it
-                            code = ""
-                        },
-                        label = { Text("Phone number") },
-                        supportingText = { Text("Use international format, for example +6281234567890.") },
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Admin email") },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !state.loading,
                         singleLine = true,
-                        isError = phone.isNotBlank() && !validPhone,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(Space.small)) {
-                        listOf(2 to "WhatsApp", 1 to "SMS").forEach { (option, label) ->
-                            FilterChip(
-                                selected = channel == option,
-                                onClick = {
-                                    channel = option
-                                    code = ""
-                                },
-                                label = { Text(label) },
-                                enabled = !state.loading,
-                            )
-                        }
-                    }
-                    if (existingOtp) {
-                        Text("Enter the verification code you already have.")
-                    } else {
-                        OutlinedButton(
-                            onClick = { onSendOtp(normalizedPhone, channel) },
-                            enabled = !state.loading && validPhone,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text(if (sent) "Resend code" else "Send code") }
-                        if (sent) Text("Check your selected channel for the code.")
-                    }
-                    if (showCodeEntry) {
-                        OutlinedTextField(
-                            value = code,
-                            onValueChange = { code = it.filter { digit -> digit in '0'..'9' }.take(4) },
-                            label = { Text("Four-digit code") },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.loading,
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { submit() }),
-                            visualTransformation = PasswordVisualTransformation(),
-                        )
-                        Button(onClick = ::submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
-                            Text(stringResource(R.string.sign_in))
-                        }
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !state.loading,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { submit() }),
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
+                    Button(onClick = ::submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.sign_in))
                     }
                     if (state.loading) LoadingState()
                     state.error?.let { Text(it.message(), color = MaterialTheme.colorScheme.error) }
@@ -119,5 +83,5 @@ fun LoginScreen(
 @Preview(showBackground = true)
 @Composable
 private fun LoginPreview() {
-    MonitorTheme { LoginScreen(AuthUiState(), { _, _ -> }, { _, _, _ -> }) }
+    MonitorTheme { LoginScreen(AuthUiState()) { _, _ -> } }
 }

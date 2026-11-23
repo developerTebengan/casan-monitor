@@ -12,8 +12,6 @@ import id.casan.monitor.data.remote.AuthEnvelope
 import id.casan.monitor.data.remote.FirebaseTokenRequest
 import id.casan.monitor.data.remote.LoginRequest
 import id.casan.monitor.data.remote.RefreshRequest
-import id.casan.monitor.data.remote.SendOtpRequest
-import id.casan.monitor.data.remote.toAccount
 import id.casan.monitor.data.remote.toSession
 import id.casan.monitor.domain.model.MonitorAccount
 import id.casan.monitor.domain.model.MonitorSession
@@ -91,28 +89,14 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun sendOtp(phone: String, channel: Int): AuthError? {
-        if (BuildConfig.BACKEND_URL.isBlank()) return AuthError.CONFIGURATION
-        return when (val result = request { api.sendOtp(SendOtpRequest(phone, channel)) }) {
-            is Reply.Failure -> result.error
-            is Reply.Success -> if (result.payload.status == "success") null else AuthError.SERVER
-        }
-    }
-
-    suspend fun login(phone: String, code: String, channel: Int): AuthError? = withContext(Dispatchers.IO) {
+    suspend fun login(email: String, password: String): AuthError? = withContext(Dispatchers.IO) {
         lock.withLock {
             if (BuildConfig.BACKEND_URL.isBlank()) return@withLock AuthError.CONFIGURATION
             if (mutableState.value is AuthState.SignedIn) return@withLock null
-            when (val result = request { api.login(LoginRequest(phone, code, channel)) }) {
+            when (val result = request { api.login(LoginRequest(email, password)) }) {
                 is Reply.Failure -> result.error
                 is Reply.Success -> {
-                    val access = result.payload.data?.token?.takeIf { result.payload.status == "success" && it.isNotBlank() }
-                        ?: return@withLock AuthError.SERVER
-                    val profile = when (val reply = request { api.profile("Bearer $access") }) {
-                        is Reply.Failure -> return@withLock reply.error
-                        is Reply.Success -> reply.payload.toAccount() ?: return@withLock AuthError.SERVER
-                    }
-                    val session = result.payload.toSession(profile.copy(phone = profile.phone.ifBlank { phone }))
+                    val session = result.payload.toSession()
                         ?: return@withLock AuthError.SERVER
                     save(session)
                 }

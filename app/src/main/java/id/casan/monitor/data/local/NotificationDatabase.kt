@@ -101,5 +101,5 @@ class NotificationDatabase @Inject constructor(@ApplicationContext context: Cont
             arrayOf(owner(accountId), notificationId),
         ) > 0
 
-    private fun owner(accountId: Long) = "${BuildConfig.BACKEND_URL}|user|$accountId"
+    private fun owner(accountId: Long) = "${BuildConfig.BACKEND_URL}|admin|$accountId"
 }

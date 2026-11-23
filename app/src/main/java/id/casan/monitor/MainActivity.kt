@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
             MonitorTheme(dark) {
                 when (val current = session) {
                     AuthState.Restoring -> SessionStatus()
-                    AuthState.SignedOut -> LoginScreen(loginUi, auth::sendOtp, auth::login)
+                    AuthState.SignedOut -> LoginScreen(loginUi, auth::login)
                     is AuthState.Unavailable -> SessionStatus(
                         current.error.message(),
                         auth::restore,

@@ -60,7 +60,7 @@ class MonitorDeviceRegistration @Inject constructor(@ApplicationContext context:
         mutableStatus.value = RegistrationStatus.WAITING
     }
 
-    private fun owner(accountId: Long) = "${BuildConfig.BACKEND_URL}|user|$accountId"
+    private fun owner(accountId: Long) = "${BuildConfig.BACKEND_URL}|admin|$accountId"
 
     private fun fingerprint(token: String) =
         MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).joinToString("") { "%02x".format(it) }

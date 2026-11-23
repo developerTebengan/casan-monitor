@@ -54,7 +54,7 @@ class CasanFirebaseMessagingService : FirebaseMessagingService() {
             0,
             Intent(this, MainActivity::class.java)
                 .setAction(MainActivity.ACTION_OPEN_NOTIFICATION)
-                .setData(Uri.fromParts(NOTIFICATION_SCHEME, "user/${session.account.id}/${item.id}", null))
+                .setData(Uri.fromParts(NOTIFICATION_SCHEME, "admin/${session.account.id}/${item.id}", null))
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE,
         )
