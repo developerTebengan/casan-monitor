@@ -13,7 +13,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import id.casan.monitor.MainActivity
 import id.casan.monitor.R
 import id.casan.monitor.data.repository.AuthRepository
-import id.casan.monitor.data.repository.AuthState
 import id.casan.monitor.domain.repository.NotificationRepository
 import javax.inject.Inject
 
@@ -30,20 +29,25 @@ class CasanFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         // Firebase displays backend notification payloads itself when the app is in the background.
         val payload = message.notification ?: return
-        val session = auth.state.value as? AuthState.SignedIn ?: return
-        if (session.expiresAt <= System.currentTimeMillis() || !registration.isAssociated(session.account.id)) return
-        if (isQueueNotification(message.data["type"]) && message.data["user_id"]?.toLongOrNull() != session.account.id) return
+        // Queue events address customer users, whose IDs can overlap admin IDs.
+        if (isQueueNotification(message.data["type"])) return
+        auth.withNotificationAccount { accountId ->
+            deliver(accountId, message, payload)
+        }
+    }
+
+    private fun deliver(accountId: Long, message: RemoteMessage, payload: RemoteMessage.Notification) {
         val item = parseNotification(
             message.messageId, payload.title, payload.body, message.data["type"],
             getString(R.string.app_name), System.currentTimeMillis(),
         ) ?: return
         val inserted = try {
-            notifications.record(session.account.id, item)
+            notifications.record(accountId, item)
         } catch (_: SQLiteException) {
             // Still display the system notification when local storage is unavailable.
             true
         }
-        if (!inserted || auth.state.value != session) return
+        if (!inserted) return
         val manager = NotificationManagerCompat.from(this)
         val channel = getString(R.string.channel_info_id)
         if (!manager.areNotificationsEnabled() ||
@@ -54,7 +58,7 @@ class CasanFirebaseMessagingService : FirebaseMessagingService() {
             0,
             Intent(this, MainActivity::class.java)
                 .setAction(MainActivity.ACTION_OPEN_NOTIFICATION)
-                .setData(Uri.fromParts(NOTIFICATION_SCHEME, "admin/${session.account.id}/${item.id}", null))
+                .setData(Uri.fromParts(NOTIFICATION_SCHEME, "admin/${accountId}/${item.id}", null))
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE,
         )

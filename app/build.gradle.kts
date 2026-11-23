@@ -30,6 +30,14 @@ fun validateBackendUrl(value: String, allowLoopbackHttp: Boolean = false) {
 validateBackendUrl(configuredBackendUrl)
 validateBackendUrl(debugBackendUrl, allowLoopbackHttp = true)
 
+val releaseSigningValues = listOf(
+    "CASAN_RELEASE_KEYSTORE",
+    "CASAN_RELEASE_STORE_PASSWORD",
+    "CASAN_RELEASE_KEY_ALIAS",
+    "CASAN_RELEASE_KEY_PASSWORD",
+).associateWith { providers.environmentVariable(it).orNull }
+val configureReleaseSigning = releaseSigningValues.values.any { it != null }
+
 android {
     namespace = "id.casan.monitor"
     compileSdk {
@@ -44,11 +52,30 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (configureReleaseSigning) {
+            require(releaseSigningValues.values.all { !it.isNullOrBlank() }) {
+                "Set all four CASAN_RELEASE signing environment variables."
+            }
+            require(configuredBackendUrl.isNotBlank()) { "Set the HTTPS CASAN release backend URL." }
+            require(layout.projectDirectory.file("google-services.json").asFile.isFile) {
+                "Install the approved Firebase configuration before signing a release."
+            }
+            create("internalRelease") {
+                storeFile = file(releaseSigningValues.getValue("CASAN_RELEASE_KEYSTORE")!!)
+                storePassword = releaseSigningValues.getValue("CASAN_RELEASE_STORE_PASSWORD")
+                keyAlias = releaseSigningValues.getValue("CASAN_RELEASE_KEY_ALIAS")
+                keyPassword = releaseSigningValues.getValue("CASAN_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "BACKEND_URL", "\"$debugBackendUrl\"")
         }
         release {
+            if (configureReleaseSigning) signingConfig = signingConfigs.getByName("internalRelease")
             buildConfigField("String", "BACKEND_URL", "\"$configuredBackendUrl\"")
         }
     }

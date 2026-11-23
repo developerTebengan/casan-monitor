@@ -51,6 +51,7 @@ class AuthRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val lock = Mutex()
+    private val notificationSessionLock = Any()
     private val mutableState = MutableStateFlow<AuthState>(AuthState.Restoring)
     val state = mutableState.asStateFlow()
     private var session: MonitorSession? = null
@@ -59,7 +60,7 @@ class AuthRepository @Inject constructor(
     suspend fun restore() = withContext(Dispatchers.IO + NonCancellable) {
         lock.withLock {
             if (!loaded) {
-                session = storage.read()
+                session = synchronized(notificationSessionLock) { storage.read() }
                 loaded = true
             }
             val current = session
@@ -81,6 +82,7 @@ class AuthRepository @Inject constructor(
                     }
                     is Reply.Failure -> if (result.error == AuthError.CREDENTIALS || result.error == AuthError.FORBIDDEN) {
                         clear()
+                        deleteDeviceToken()
                     } else {
                         mutableState.value = AuthState.Unavailable(result.error)
                     }
@@ -118,6 +120,7 @@ class AuthRepository @Inject constructor(
                     is Reply.Failure -> when (response.error) {
                         AuthError.CREDENTIALS -> {
                             clear()
+                            deleteDeviceToken()
                             DeviceRegistrationResult.SESSION_CHANGED
                         }
                         AuthError.TIMEOUT, AuthError.NETWORK, AuthError.SERVER, AuthError.RATE_LIMIT -> DeviceRegistrationResult.RETRY
@@ -131,20 +134,34 @@ class AuthRepository @Inject constructor(
         val previous = lock.withLock {
             val current = session
             clear()
-            if (current != null && FirebaseApp.getApps(context).any { it.name == FirebaseApp.DEFAULT_APP_NAME }) {
-                try {
-                    withTimeoutOrNull(5_000) { FirebaseMessaging.getInstance().deleteToken().awaitResult() }
-                } catch (_: Exception) {
-                    // Local sign-out succeeds even when Firebase is unavailable.
-                }
-            }
+            if (current != null) deleteDeviceToken()
             current
         }
         if (previous != null) request { api.logout(RefreshRequest(previous.refreshToken)) }
         Unit
     }
 
-    private fun clear() {
+    private suspend fun deleteDeviceToken() {
+        if (FirebaseApp.getApps(context).none { it.name == FirebaseApp.DEFAULT_APP_NAME }) return
+        try {
+            withTimeoutOrNull(5_000) { FirebaseMessaging.getInstance().deleteToken().awaitResult() }
+        } catch (_: Exception) {
+            // The local session is already cleared. Firebase deletion is best effort.
+        }
+    }
+
+    // Firebase can start the process before any Activity exists. Restore only local,
+    // unexpired credentials here and leave network refresh to the normal sign-in flow.
+    internal fun withNotificationAccount(deliver: (Long) -> Unit) = synchronized(notificationSessionLock) {
+        val accountId = when (val state = mutableState.value) {
+            is AuthState.SignedIn -> state.account.id.takeIf { state.expiresAt > System.currentTimeMillis() }
+            AuthState.Restoring -> storage.read()?.takeUnless { it.isExpired() }?.account?.id
+            else -> null
+        }
+        if (accountId != null && registration.isAssociated(accountId)) deliver(accountId)
+    }
+
+    private fun clear() = synchronized(notificationSessionLock) {
         storage.clear()
         session = null
         loaded = true
@@ -157,14 +174,16 @@ class AuthRepository @Inject constructor(
         mutableState.value = AuthState.SignedIn(session.account, session.expiresAt)
     }
 
-    private fun save(value: MonitorSession): AuthError? = try {
-        storage.write(value)
-        session = value
-        loaded = true
-        publish(value)
-        null
-    } catch (_: Exception) {
-        AuthError.STORAGE
+    private fun save(value: MonitorSession): AuthError? = synchronized(notificationSessionLock) {
+        try {
+            storage.write(value)
+            session = value
+            loaded = true
+            publish(value)
+            null
+        } catch (_: Exception) {
+            AuthError.STORAGE
+        }
     }
 
     private sealed interface Reply<out T> {

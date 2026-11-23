@@ -2,6 +2,8 @@
 
 CASAN Monitor is a native Android app for internal engineering and operations. CASAN Monitor uses CASAN admin sign-in with email and password and gates the dashboard, alerts, history, and settings on an authenticated session. Day 3 adds an account-scoped Notification Center for messages delivered to the app.
 
+See the [Day 5 test report](docs/DAY5_TEST_REPORT.md) for verification results, release signing, and the device test procedure.
+
 ## Build and run
 
 1. Open this directory in Android Studio with AGP 9.3 support. The Gradle daemon toolchain requests JetBrains JDK 25. The app targets Java and Kotlin JVM 17. Install Android SDK Platform 37.1, Build-Tools 36.0.0, and Platform-Tools.
@@ -54,14 +56,14 @@ The backend sends Firebase notification title/body. Its queue sender adds metada
 1. Configure a reachable backend with a working CASAN admin test account. On localhost, run `adb reverse tcp:8080 tcp:8080` after connecting the test device.
 2. Put the approved CASAN Firebase project's `google-services.json` at `app/google-services.json` for package `id.casan.monitor`. Rebuild the debug APK so the Google Services plugin applies.
 3. Enter the admin email and password, then tap **Sign in**. Check Dashboard, the admin identity in Settings, invalid credential handling, and session restoration after restarting the app.
-4. Open **Settings → Notifications**. Check that it shows **Device registered**, then grant Android notification permission if needed. Send a test message to the registered admin device token from the configured Firebase project. Existing backend charging, rental, and queue senders target user devices. Test the app in the foreground, then in the background. In the foreground, confirm arrival in Alerts and verify that opening detail updates the unread count. In the background, verify the system tray independently from local history.
+4. Open **Settings → Notifications**. Check that it shows **Device registered**, then grant Android notification permission if needed. Use an authorized admin sender in the deployed CASAN environment if available. The checked-in charging, rental, and queue senders target user devices. An authorized Firebase Console message can check Firebase connectivity independently. Test the app in the foreground, then in the background. In the foreground, confirm arrival in Alerts and verify that opening detail updates the unread count. In the background, verify the system tray independently from local history.
 5. Use airplane mode and reconnect, then test sign-out and sign-in with another account. Verify that the previous account's history stays hidden and device registration runs for the new admin.
 
 ## Day 3 Notification Center
 
 Alerts, History, Dashboard counts, and notification detail share an account-scoped SQLite repository. The existing Firebase service validates title/body and records supported messages before checking Android notification permission. A stable FCM message ID prevents duplicate rows and preserves read status. Opening a detail marks it read, and the resulting local update refreshes the unread count and both lists. History is newest first. Logout hides the account's rows, which remain available on the same device when that account signs back in. The SQLite owner combines the backend base URL, admin principal type, and backend admin ID.
 
-The backend exposes no notification list, read-status, or incident-detail endpoint. Refresh re-reads local storage. Queue event types map to the Charging queue category. The current payload provides no source or severity, so the UI omits source and displays Info priority. Critical, High, and Medium filters have no matches for these payloads. Read status is device-local.
+The backend exposes no notification list, read-status, or incident-detail endpoint. Refresh re-reads local storage. Previously cached queue items retain the Charging queue category. The admin messaging callback ignores the known customer queue types. The current supported payload provides no source or severity, so the UI omits source and displays Info priority. Critical, High, and Medium filters have no matches for these payloads. Read status is device-local.
 
 Firebase automatically displays current backend notification payloads in the background and may never invoke the app's message callback. Those notifications may be absent from history, and their launcher taps lack the local notification ID. A tap on a foreground notification created by Monitor can open its saved detail after authentication. Live delivery still depends on Firebase configuration and a registered CASAN admin token.
 

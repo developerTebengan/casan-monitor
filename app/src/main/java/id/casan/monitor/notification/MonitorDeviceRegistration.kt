@@ -21,8 +21,9 @@ class MonitorDeviceRegistration @Inject constructor(@ApplicationContext context:
     val requests = mutableRequests.asStateFlow()
     private var epoch = 0L
 
+    @Synchronized
     fun tokenChanged() {
-        preferences.edit().putBoolean("registration_pending", true).apply()
+        epoch++
         requestSync()
     }
 
@@ -49,14 +50,14 @@ class MonitorDeviceRegistration @Inject constructor(@ApplicationContext context:
     fun confirm(generation: Long, accountId: Long, token: String) {
         if (generation != epoch) return
         preferences.edit().putString("owner", owner(accountId)).putString("fingerprint", fingerprint(token))
-            .remove("registration_pending").apply()
+            .apply()
         mutableStatus.value = RegistrationStatus.REGISTERED
     }
 
     @Synchronized
     fun clearAssociation() {
         epoch++
-        preferences.edit().remove("owner").remove("fingerprint").remove("registration_pending").apply()
+        preferences.edit().remove("owner").remove("fingerprint").apply()
         mutableStatus.value = RegistrationStatus.WAITING
     }
 

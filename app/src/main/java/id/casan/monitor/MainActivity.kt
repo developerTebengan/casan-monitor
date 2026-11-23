@@ -1,6 +1,7 @@
 package id.casan.monitor
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private val auth: LoginViewModel by viewModels()
     private val online = mutableStateOf(true)
     private val notificationsEnabled = mutableStateOf(false)
+    private val infoChannelBlocked = mutableStateOf(false)
     private val canRequestNotifications = mutableStateOf(false)
     private val pendingNotification = mutableStateOf<String?>(null)
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -153,6 +155,7 @@ class MainActivity : ComponentActivity() {
                             account = SettingsAccount(
                                 current.account,
                                 notificationsEnabled.value,
+                                infoChannelBlocked.value,
                                 canRequestNotifications.value,
                                 registrationStatus,
                                 registration::requestSync,
@@ -197,6 +200,9 @@ class MainActivity : ComponentActivity() {
 
     private fun updatePermissionStatus() {
         notificationsEnabled.value = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        infoChannelBlocked.value = getSystemService(NotificationManager::class.java)
+            .getNotificationChannel(getString(R.string.channel_info_id))?.importance ==
+            NotificationManager.IMPORTANCE_NONE
         canRequestNotifications.value = Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
             !getPreferences(MODE_PRIVATE).getBoolean("notification_permission_requested", false)

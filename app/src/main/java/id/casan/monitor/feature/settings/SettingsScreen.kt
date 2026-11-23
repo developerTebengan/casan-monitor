@@ -20,6 +20,7 @@ import id.casan.monitor.notification.RegistrationStatus
 data class SettingsAccount(
     val profile: id.casan.monitor.domain.model.MonitorAccount,
     val notificationsEnabled: Boolean,
+    val infoChannelBlocked: Boolean,
     val mayRequestPermission: Boolean,
     val registration: RegistrationStatus,
     val onRetryRegistration: () -> Unit,
@@ -82,6 +83,7 @@ fun SettingsScreen(
                     Text(stringResource(R.string.firebase_token), style = MaterialTheme.typography.titleMedium)
                     if (account != null) {
                         val permission = when {
+                            account.notificationsEnabled && account.infoChannelBlocked -> "Info channel disabled"
                             account.notificationsEnabled -> "Notifications enabled"
                             account.mayRequestPermission -> "Permission required"
                             else -> "Notifications disabled"
